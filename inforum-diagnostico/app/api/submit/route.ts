@@ -1,7 +1,6 @@
-
 import type { NextRequest } from "next/server";
 
-export const runtime = "nodejs"; // ejecución en Node.js
+export const runtime = "nodejs";
 
 // --- Utilidades ---
 const FREE_EMAIL_DOMAINS = [
@@ -12,7 +11,7 @@ function isCorporateEmail(email: string) {
   return !!domain && !FREE_EMAIL_DOMAINS.includes(domain);
 }
 
-// Rate limit simple (en memoria por instancia)
+// Rate limit simple (en memoria)
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hora
 const RATE_MAX = 5; // 5 envíos por IP por hora
 const ipHits = new Map<string, { count: number; resetAt: number }>();
@@ -29,15 +28,15 @@ function checkRate(ip: string) {
 }
 
 // Pipedrive config
-const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN!; // setear en Vercel
+const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN!;
 const PIPEDRIVE_BASE = "https://api.pipedrive.com/v1";
 
 // Brevo config
-const BREVO_API_KEY = process.env.BREVO_API_KEY!; // setear en Vercel
-const EMAIL_FROM = process.env.EMAIL_FROM!; // ej. info@inforumsol.com
-const EMAIL_BCC = process.env.EMAIL_BCC || ""; // opcional
+const BREVO_API_KEY = process.env.BREVO_API_KEY!;
+const EMAIL_FROM = process.env.EMAIL_FROM!;
+const EMAIL_BCC = process.env.EMAIL_BCC || "";
 
-// reCAPTCHA (opcional: si no hay secret, se omite)
+// reCAPTCHA (opcional)
 const RECAPTCHA_SECRET = process.env.RECAPTCHA_SECRET || "";
 
 // Custom fields de Pipedrive (Deal)
@@ -46,12 +45,7 @@ const CF_SISTEMA = process.env.PD_CF_SISTEMA || "";
 
 // Pipeline IDs por país
 const PIPELINES: Record<string, number> = {
-  GT: 1, // Guatemala
-  SV: 2, // El Salvador
-  HN: 3, // Honduras
-  DO: 4, // República Dominicana
-  EC: 5, // Ecuador
-  PA: 6, // Panamá
+  GT: 1, SV: 2, HN: 3, DO: 4, EC: 5, PA: 6,
 };
 
 // --- Helpers Pipedrive ---
@@ -70,30 +64,30 @@ async function pd(path: string, init?: RequestInit) {
 }
 
 async function createOrganization(name: string, extras: Record<string, any>) {
-  return pd("/organizations", { method: "POST", body: JSON.stringify({ name, ...extras }) });
+  return pd(`/organizations`, { method: "POST", body: JSON.stringify({ name, ...extras }) });
 }
 
 async function createPerson(name: string, email: string, org_id?: number) {
-  return pd("/persons", { method: "POST", body: JSON.stringify({ name, email, org_id }) });
+  return pd(`/persons`, { method: "POST", body: JSON.stringify({ name, email, org_id }) });
 }
 
 async function createDeal(data: Record<string, any>) {
-  return pd("/deals", { method: "POST", body: JSON.stringify(data) });
+  return pd(`/deals`, { method: "POST", body: JSON.stringify(data) });
 }
 
 async function addNote(deal_id: number, content: string) {
-  return pd("/notes", { method: "POST", body: JSON.stringify({ deal_id, content }) });
+  return pd(`/notes`, { method: "POST", body: JSON.stringify({ deal_id, content }) });
 }
 
 // --- Brevo ---
 async function sendBrevoEmail({ to, subject, html, bcc = EMAIL_BCC }: { to: string; subject: string; html: string; bcc?: string }) {
-  const payload: any = {
+  const payload = {
     sender: { email: EMAIL_FROM },
     to: [{ email: to }],
     subject,
-    htmlContent: html
+    htmlContent: html,
+    bcc: bcc ? [{ email: bcc }] : undefined,
   };
-  if (bcc) payload.bcc = [{ email: bcc }];
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -120,7 +114,7 @@ function buildEmailTemplates(resultKey: "califica" | "nocupo", name: string) {
           <p>Un especialista te contactará en breve. Si prefieres, puedes escribirnos ahora mismo por WhatsApp:</p>
           <p><a href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico">Ir a WhatsApp</a></p>
           <p>— Equipo Grupo Inforum</p>
-        </div>`
+        </div>`,
     };
   }
   return {
@@ -131,13 +125,12 @@ function buildEmailTemplates(resultKey: "califica" | "nocupo", name: string) {
         <p>Gracias por completar el diagnóstico. Por el momento nos encontramos sin cupo para la asesoría sin costo.</p>
         <p>Te enviaremos información útil sobre nuestros servicios y quedamos atentos a apoyarte cuando se habiliten nuevos cupos.</p>
         <p>— Equipo Grupo Inforum</p>
-      </div>`
+      </div>`,
   };
 }
 
 function decideResult(answers: { score: 1 | 2 }[]): { resultKey: "califica" | "nocupo"; title: string; message: string } {
-  const countOnes = answers.reduce((acc,a)=> acc + (a.score === 1 ? 1 : 0), 0);
-  // Regla: <=3 ⇒ califica, >=4 ⇒ no hay cupo
+  const countOnes = answers.reduce((acc, a) => acc + (a.score === 1 ? 1 : 0), 0);
   if (countOnes <= 3) {
     return {
       resultKey: "califica",
@@ -160,10 +153,10 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { answers, contact, utms, recaptchaToken } = body as {
+    const { answers, contact, utms } = body as {
       answers: { id: string; value: string; score: 1 | 2; extraText?: string }[];
       contact: { name: string; company: string; email: string; country: keyof typeof PIPELINES; consent: boolean };
-      utms?: Record<string,string>;
+      utms?: Record<string, string>;
       recaptchaToken?: string;
     };
 
@@ -172,11 +165,11 @@ export async function POST(req: NextRequest) {
     if (!isCorporateEmail(contact.email)) throw new Error("Usa un correo corporativo (no gratuito)");
 
     // reCAPTCHA opcional
-    if (RECAPTCHA_SECRET && recaptchaToken) {
+    if (RECAPTCHA_SECRET && body.recaptchaToken) {
       const v = await fetch("https://www.google.com/recaptcha/api/siteverify", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ secret: RECAPTCHA_SECRET, response: recaptchaToken })
+        body: new URLSearchParams({ secret: RECAPTCHA_SECRET, response: body.recaptchaToken }),
       });
       const vjson = await v.json();
       if (!vjson.success || (typeof vjson.score === "number" && vjson.score < 0.7)) {
@@ -219,7 +212,7 @@ export async function POST(req: NextRequest) {
     noteLines.push(`Resultado: ${decision.resultKey}`);
     if (utms && Object.keys(utms).length) {
       noteLines.push("UTMs:");
-      for (const [k,v] of Object.entries(utms)) noteLines.push(`- ${k}: ${v}`);
+      for (const [k, v] of Object.entries(utms)) noteLines.push(`- ${k}: ${v}`);
     }
     noteLines.push("Respuestas:");
     answers.forEach(a => noteLines.push(`- ${a.id}: ${a.value}${a.extraText ? ` (${a.extraText})` : ""} [score ${a.score}]`));
@@ -234,7 +227,7 @@ export async function POST(req: NextRequest) {
       resultKey: decision.resultKey,
       title: decision.title,
       message: decision.message,
-      dealId
+      dealId,
     }), { status: 200 });
   } catch (err: any) {
     return new Response(JSON.stringify({ message: err.message || "Error" }), { status: 400 });
