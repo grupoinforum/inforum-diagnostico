@@ -24,7 +24,7 @@ async function pd(path: string, init?: RequestInit) {
   if (!PD_DOMAIN || !PD_API) throw new Error("Faltan variables de Pipedrive (PIPEDRIVE_DOMAIN / PIPEDRIVE_API_KEY)");
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`Pipedrive ${path} -> ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`Pipedrive ${path} → ${res.status} ${await res.text()}`);
   return res.json();
 }
 
@@ -33,7 +33,6 @@ async function sendConfirmation(data: Payload) {
     console.warn("Brevo SMTP no configurado. No se envía correo de confirmación.");
     return;
   }
-
   const nodemailer = await import("nodemailer");
   const transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
@@ -50,9 +49,9 @@ Rita Muralles de nuestro equipo se estará comunicando pronto contigo para darte
 
   await transporter.sendMail({
     from: EMAIL_FROM,
-    to: data.email, // le llega directo al contacto
+    to: data.email,
     subject: "Confirmación de recepción - Grupo Inforum",
-    text, // mensaje en texto sencillo
+    text,
   });
 }
 
@@ -66,9 +65,7 @@ export async function POST(req: Request) {
     // 1) Buscar/crear Persona
     let personId: number | null = null;
     try {
-      const search = await pd(
-        `/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`
-      );
+      const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
       const item = search?.data?.items?.[0];
       if (item?.item?.id) personId = item.item.id;
     } catch {}
@@ -102,16 +99,16 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) Crear Lead
+    // 3) Crear Lead (⚠️ value DEBE ser objeto o se omite)
     await pd(`/leads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: `Diagnóstico – ${data.name}`,
-        person_id: personId!,
-        org_id: orgId,
-        value: 0,
-        currency: "USD",
+        person_id: personId!,                // OK
+        organization_id: orgId,              // usar organization_id para leads
+        // Omites value, o si quieres dejarlo:
+        value: { amount: 0, currency: "USD" } // <- antes era número; ahora objeto
       }),
     });
 
