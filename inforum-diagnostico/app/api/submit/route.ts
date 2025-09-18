@@ -12,14 +12,15 @@ type Payload = {
   answers?: any;         // Resumen/resultado del cuestionario
 };
 
-const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
-const PD_API = process.env.PIPEDRIVE_API_KEY!;
+const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN;
+const PD_API = process.env.PIPEDRIVE_API_KEY;
 const RESEND = process.env.RESEND_API_KEY;
 const NOTIFY_TO = process.env.NOTIFY_TO || "ventas@tudominio.com";
 const BREVO_USER = process.env.BREVO_SMTP_USER;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS;
 
 async function pd(path: string, init?: RequestInit) {
+  if (!PD_DOMAIN || !PD_API) throw new Error("Faltan variables de Pipedrive");
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Pipedrive ${path} -> ${res.status} ${await res.text()}`);
@@ -40,11 +41,14 @@ async function sendEmail(data: Payload) {
     }
   `;
 
-  // A) Resend (simple, sin dependencias)
+  // A) Resend
   if (RESEND) {
     await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${RESEND}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         from: "Inforum <no-reply@tudominio.com>",
         to: [NOTIFY_TO],
@@ -74,16 +78,21 @@ async function sendEmail(data: Payload) {
 
 export async function POST(req: Request) {
   try {
-    if (!PD_DOMAIN || !PD_API) throw new Error("Faltan PIPEDRIVE_DOMAIN o PIPEDRIVE_API_KEY");
     const data = (await req.json()) as Payload;
+
     if (!data?.name || !data?.email) {
-      return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Faltan nombre o email" },
+        { status: 400 }
+      );
     }
 
-    // 1) Buscar/crear Persona por email
+    // 1) Buscar/crear Persona
     let personId: number | null = null;
     try {
-      const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
+      const search = await pd(
+        `/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`
+      );
       const item = search?.data?.items?.[0];
       if (item?.item?.id) personId = item.item.id;
     } catch {}
@@ -99,11 +108,15 @@ export async function POST(req: Request) {
       personId = created?.data?.id;
     }
 
-    // 2) Buscar/crear Organización por Empresa
+    // 2) Buscar/crear Organización
     let orgId: number | undefined;
     if (data.company) {
       try {
-        const s = await pd(`/organizations/search?term=${encodeURIComponent(data.company)}&exact_match=true`);
+        const s = await pd(
+          `/organizations/search?term=${encodeURIComponent(
+            data.company
+          )}&exact_match=true`
+        );
         const it = s?.data?.items?.[0];
         orgId = it?.item?.id;
       } catch {}
@@ -130,7 +143,7 @@ export async function POST(req: Request) {
       }),
     });
 
-    // 4) Nota con país y respuestas (útil si aún no tienes campos personalizados)
+    // 4) Nota con país y respuestas
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -138,7 +151,9 @@ export async function POST(req: Request) {
         (data.company ? `• Empresa: ${data.company}\n` : "") +
         `• Email: ${data.email}\n` +
         (data.country ? `• País: ${data.country}\n` : "") +
-        (data.answers ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}` : "");
+        (data.answers
+          ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}`
+          : "");
       await pd(`/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -146,12 +161,15 @@ export async function POST(req: Request) {
       });
     } catch {}
 
-    // 5) Email de notificación (si configuraste Resend o Brevo)
+    // 5) Email
     await sendEmail(data);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
-    return NextResponse.json({ ok: false, error: "No se logró enviar" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "No se logró enviar" },
+      { status: 500 }
+    );
   }
 }
