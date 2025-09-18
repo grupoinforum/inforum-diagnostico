@@ -2,6 +2,14 @@ import "./globals.css";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 
+
+<Image
+  src="/logo-inforum.png"
+  alt="Inforum"
+  width={160}
+  height={36}
+  className="h-9 w-auto object-contain"
+/>
 const montserrat = Montserrat({
   subsets: ["latin"],
   weight: ["400","500","600","700","800"],
