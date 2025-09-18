@@ -4,88 +4,72 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 
-// ---- Tipos ---------------------------------------------------
 type Payload = {
   name: string;
   company?: string;
   email: string;
-  country?: string;          // acepta código (GT) o nombre ("Guatemala")
-  answers?: any;             // { items: [...], utms: {...} } o lo que envíes
+  country?: string;     // etiqueta seleccionada en el form (ej. "Guatemala")
+  answers?: any;
 };
 
-// ---- Env -----------------------------------------------------
-const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
-const PD_API = process.env.PIPEDRIVE_API_KEY!;
+const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN;
+const PD_API = process.env.PIPEDRIVE_API_KEY;
 
-const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 const BREVO_USER = process.env.BREVO_SMTP_USER;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS;
+const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 
 // Pipelines por país
-const PD_PIPELINE = {
-  GT: Number(process.env.PD_PIPELINE_GT || 1),
-  SV: Number(process.env.PD_PIPELINE_SV || 2),
-  HN: Number(process.env.PD_PIPELINE_HN || 3),
-  DO: Number(process.env.PD_PIPELINE_DO || 4),
-  EC: Number(process.env.PD_PIPELINE_EC || 5),
-  PA: Number(process.env.PD_PIPELINE_PA || 6),
-};
+const PIPELINES = {
+  GT: Number(process.env.PD_PIPELINE_GT ?? 1),
+  SV: Number(process.env.PD_PIPELINE_SV ?? 2),
+  HN: Number(process.env.PD_PIPELINE_HN ?? 3),
+  DO: Number(process.env.PD_PIPELINE_DO ?? 4),
+  EC: Number(process.env.PD_PIPELINE_EC ?? 5),
+  PA: Number(process.env.PD_PIPELINE_PA ?? 6),
+} satisfies Record<string, number>;
 
-// Stage “Capa 1” por país
-const PD_STAGE_CAPA1 = {
-  GT: Number(process.env.PD_STAGE_GT_CAPA1 || 6),
-  SV: Number(process.env.PD_STAGE_SV_CAPA1 || 7),
-  HN: Number(process.env.PD_STAGE_HN_CAPA1 || 13),
-  DO: Number(process.env.PD_STAGE_DO_CAPA1 || 19),
-  EC: Number(process.env.PD_STAGE_EC_CAPA1 || 25),
-  PA: Number(process.env.PD_STAGE_PA_CAPA1 || 31),
-};
+// Etapa "Capa 1" por país
+const STAGE_CAPA1 = {
+  GT: Number(process.env.PD_STAGE_GT_CAPA1 ?? 6),
+  SV: Number(process.env.PD_STAGE_SV_CAPA1 ?? 7),
+  HN: Number(process.env.PD_STAGE_HN_CAPA1 ?? 13),
+  DO: Number(process.env.PD_STAGE_DO_CAPA1 ?? 19),
+  EC: Number(process.env.PD_STAGE_EC_CAPA1 ?? 25),
+  PA: Number(process.env.PD_STAGE_PA_CAPA1 ?? 31),
+} satisfies Record<string, number>;
 
-// ---- Helpers -------------------------------------------------
-async function pd(path: string, init?: RequestInit) {
-  const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${
-    path.includes("?") ? "&" : "?"
-  }api_token=${PD_API}`;
+// Normaliza etiqueta país -> código
+function countryToCode(label?: string): keyof typeof PIPELINES {
+  if (!label) return "GT";
+  const x = label.trim().toUpperCase();
 
-  const res = await fetch(url, init);
-  const text = await res.text();
+  const MAP: Record<string, keyof typeof PIPELINES> = {
+    "GUATEMALA": "GT",
+    "EL SALVADOR": "SV",
+    "HONDURAS": "HN",
+    "PANAMÁ": "PA",
+    "PANAMA": "PA",
+    "REPÚBLICA DOMINICANA": "DO",
+    "REPUBLICA DOMINICANA": "DO",
+    "ECUADOR": "EC",
+  };
 
-  if (!res.ok) {
-    throw new Error(`Pipedrive ${path} → ${res.status} ${text}`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text as any;
-  }
+  return MAP[x] ?? "GT";
 }
 
-/** Normaliza el país recibido a código de 2 letras que esperamos en ENV */
-function normalizeCountry(input?: string): keyof typeof PD_PIPELINE {
-  if (!input) return "GT"; // default
-  const x = input.trim().toUpperCase();
-
-  // ya viene como código
-  if (["GT", "SV", "HN", "PA", "DO", "EC"].includes(x)) return x as any;
-
-  // viene como nombre
-  const map: Record<string, keyof typeof PD_PIPELINE> = {
-    GUATEMALA: "GT",
-    "EL SALVADOR": "SV",
-    SALVADOR: "SV",
-    HONDURAS: "HN",
-    PANAMÁ: "PA",
-    PANAMA: "PA",
-    "REPÚBLICA DOMINICANA": "DO",
-    REPUBLICA DOMINICANA: "DO",
-    ECUADOR: "EC",
-  };
-  return map[x] ?? "GT";
+async function pd(path: string, init?: RequestInit) {
+  if (!PD_DOMAIN || !PD_API) throw new Error("Faltan PIPEDRIVE_DOMAIN / PIPEDRIVE_API_KEY");
+  const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
+  const res = await fetch(url, init);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Pipedrive ${path} → ${res.status} ${text}`);
+  try { return JSON.parse(text); } catch { return text as any; }
 }
 
 async function sendConfirmation(data: Payload) {
   if (!BREVO_USER || !BREVO_PASS) {
-    console.warn("[email] Brevo SMTP no configurado. Se omite envío.");
+    console.warn("Brevo SMTP no configurado. No se envía correo.");
     return;
   }
   const nodemailer = await import("nodemailer");
@@ -110,35 +94,27 @@ Rita Muralles de nuestro equipo se estará comunicando pronto contigo para darte
   });
 }
 
-// ---- Handler -------------------------------------------------
 export async function POST(req: Request) {
   try {
-    if (!PD_DOMAIN || !PD_API) {
-      throw new Error("Faltan PIPEDRIVE_DOMAIN o PIPEDRIVE_API_KEY");
-    }
-
     const data = (await req.json()) as Payload;
     if (!data?.name || !data?.email) {
-      return NextResponse.json(
-        { ok: false, error: "Faltan nombre o email" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    // 1) Buscar/crear Persona por email
+    // País -> pipeline y stage
+    const cc = countryToCode(data.country);
+    const pipeline_id = PIPELINES[cc];
+    const stage_id = STAGE_CAPA1[cc];
+
+    // Buscar/crear Persona
     let personId: number | null = null;
     try {
-      const search = await pd(
-        `/persons/search?term=${encodeURIComponent(
-          data.email
-        )}&fields=email&exact_match=true`
-      );
+      const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
       const item = (search as any)?.data?.items?.[0];
       if (item?.item?.id) personId = item.item.id;
     } catch (e) {
       console.error("[persons/search]", (e as Error).message);
     }
-
     if (!personId) {
       const created = await pd(`/persons`, {
         method: "POST",
@@ -151,20 +127,14 @@ export async function POST(req: Request) {
       personId = (created as any)?.data?.id;
     }
 
-    // 2) (Opcional) Buscar/crear Organización
+    // (Opcional) Org por company
     let orgId: number | undefined;
     if (data.company) {
       try {
-        const s = await pd(
-          `/organizations/search?term=${encodeURIComponent(
-            data.company
-          )}&exact_match=true`
-        );
+        const s = await pd(`/organizations/search?term=${encodeURIComponent(data.company)}&exact_match=true`);
         const it = (s as any)?.data?.items?.[0];
         orgId = it?.item?.id;
-      } catch (e) {
-        console.error("[organizations/search]", (e as Error).message);
-      }
+      } catch {}
       if (!orgId) {
         try {
           const o = await pd(`/organizations`, {
@@ -179,13 +149,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) Resolver pipeline/stage según país
-    const cc = normalizeCountry(data.country);
-    const pipeline_id = PD_PIPELINE[cc];
-    const stage_id = PD_STAGE_CAPA1[cc];
-
-    // 4) Crear DEAL directamente en “Capa 1” del pipeline correspondiente
-    const dealRes = await pd(`/deals`, {
+    // Crear DEAL en Capa 1 del pipeline correcto
+    await pd(`/deals`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -193,15 +158,13 @@ export async function POST(req: Request) {
         person_id: personId!,
         org_id: orgId,
         pipeline_id,
-        stage_id,
+        stage_id, // Capa 1
         value: 0,
-        currency: "USD",
-        visible_to: 3, // 3=entera la compañía (opcional)
+        currency: "GTQ", // ajusta si quieres
       }),
     });
-    const dealId = (dealRes as any)?.data?.id;
 
-    // 5) Nota con país y respuestas (la ligamos al deal si existe)
+    // Nota con país y respuestas
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -213,36 +176,22 @@ export async function POST(req: Request) {
       await pd(`/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          person_id: personId!,
-          org_id: orgId,
-          deal_id: dealId,
-        }),
+        body: JSON.stringify({ content, person_id: personId!, org_id: orgId }),
       });
     } catch (e) {
       console.error("[notes POST]", (e as Error).message);
     }
 
-    // 6) Enviar correo de confirmación (no bloquea el OK)
+    // Email de confirmación
     try {
       await sendConfirmation(data);
     } catch (e) {
       console.error("[email]", (e as Error).message);
     }
 
-    return NextResponse.json({
-      ok: true,
-      message: "Deal creado en Capa 1 y correo enviado",
-      countryCode: cc,
-      pipeline_id,
-      stage_id,
-    });
+    return NextResponse.json({ ok: true, message: "Deal creado en Capa 1 y correo enviado" });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
-    return NextResponse.json(
-      { ok: false, error: e?.message || "No se logró enviar" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
   }
 }
