@@ -8,3 +8,6 @@ import Image from "next/image";
   className="h-9 w-auto object-contain"
 />
 
+git add .
+git commit -m "fix: logo correcto en header y footer"
+git push
