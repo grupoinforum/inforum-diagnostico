@@ -26,20 +26,18 @@ async function pd(path: string, init?: RequestInit) {
   const res = await fetch(url, init);
   const text = await res.text();
   if (!res.ok) {
-    // Propaga el error legible para verlo en el Response del cliente
     throw new Error(`Pipedrive ${path} → ${res.status} ${text}`);
   }
   try {
     return JSON.parse(text);
   } catch {
-    // por si alguna respuesta no es JSON
     return text as any;
   }
 }
 
 async function sendConfirmation(data: Payload) {
   if (!BREVO_USER || !BREVO_PASS) {
-    console.warn("Brevo SMTP no configurado. No se envía correo de confirmación.");
+    console.warn("⚠️ Brevo SMTP no configurado. No se envía correo de confirmación.");
     return;
   }
   const nodemailer = await import("nodemailer");
@@ -56,12 +54,17 @@ Rita Muralles de nuestro equipo se estará comunicando pronto contigo para darte
 
 — Grupo Inforum`;
 
-  await transporter.sendMail({
-    from: EMAIL_FROM,
-    to: data.email,
-    subject: "Confirmación de recepción - Grupo Inforum",
-    text,
-  });
+  try {
+    await transporter.sendMail({
+      from: EMAIL_FROM,
+      to: data.email,
+      subject: "Confirmación de recepción - Grupo Inforum",
+      text,
+    });
+    console.log("✅ Correo enviado a:", data.email);
+  } catch (err: any) {
+    console.error("❌ Error al enviar correo:", err.message || err);
+  }
 }
 
 export async function POST(req: Request) {
@@ -71,7 +74,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    // 1) Buscar/crear Persona por email
+    // 1) Buscar/crear Persona
     let personId: number | null = null;
     try {
       const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
@@ -93,7 +96,7 @@ export async function POST(req: Request) {
       personId = (created as any)?.data?.id;
     }
 
-    // 2) (Opcional) Buscar/crear Organización (NO la usaremos para el lead por ahora)
+    // 2) (Opcional) Buscar/crear Organización
     let orgId: number | undefined;
     if (data.company) {
       try {
@@ -117,18 +120,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) Crear Lead con el payload mínimo válido (solo title + person_id)
-    //    * Quitamos value / organization_id para evitar validaciones 400.
+    // 3) Crear Lead (mínimo válido)
     await pd(`/leads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: `Diagnóstico – ${data.name}`,
-        person_id: personId!, // numérico
+        person_id: personId!,
       }),
     });
 
-    // 4) Nota con país y respuestas (la dejamos vinculada a persona + org si existiera)
+    // 4) Nota con info
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -146,17 +148,12 @@ export async function POST(req: Request) {
       console.error("[notes POST] ", (e as Error).message);
     }
 
-    // 5) Enviar correo de confirmación al contacto (no bloquea el OK)
-    try {
-      await sendConfirmation(data);
-    } catch (e) {
-      console.error("[email] ", (e as Error).message);
-    }
+    // 5) Enviar correo
+    await sendConfirmation(data);
 
     return NextResponse.json({ ok: true, message: "Lead creado y correo enviado" });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
-    // Devuelve el error real para que lo veas en Network → Response
     return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
   }
 }
