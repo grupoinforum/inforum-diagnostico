@@ -1,15 +1,11 @@
 import "./globals.css";
 import Image from "next/image";
-import { Montserrat } from "next/font/google";
+import Link from "next/link";
+import type { Metadata } from "next";
 
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-export const metadata = {
-  title: "Inforum · Diagnóstico",
-  description: "Cuestionario de diagnóstico",
+export const metadata: Metadata = {
+  title: "Inforum Diagnóstico",
+  description: "Aplicación de diagnóstico de Inforum",
 };
 
 export default function RootLayout({
@@ -19,46 +15,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={montserrat.className}>
+      <body className="flex flex-col min-h-screen bg-gray-50">
         {/* HEADER */}
-        <header className="bg-brand-navy text-white py-3">
-          <div className="mx-auto max-w-6xl flex items-center gap-3 px-6">
+        <header className="bg-[#082349] text-white">
+          <div className="max-w-7xl mx-auto flex items-center gap-4 px-6 py-3">
             <Image
               src="/logo-inforum.png"
               alt="Inforum"
               width={160}
               height={40}
-              className="h-9 w-auto object-contain"
+              className="h-10 w-auto object-contain"
+              priority
             />
-            <h1 className="text-lg font-semibold">Diagnóstico</h1>
+            <span className="text-lg font-semibold">Diagnóstico</span>
           </div>
         </header>
 
         {/* MAIN */}
-        <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+        <main className="flex-1">{children}</main>
 
         {/* FOOTER */}
-        <footer className="mt-12 bg-brand-navy text-white">
-          <div className="mx-auto max-w-6xl px-6 py-8 grid gap-8 md:grid-cols-2">
-            <div>
-              <Image
-                src="/logo-inforum.png"
-                alt="Inforum"
-                width={160}
-                height={40}
-                className="h-8 w-auto object-contain mb-3"
-              />
-              <p className="text-white/70 text-sm">
-                © {new Date().getFullYear()} Inforum. Todos los derechos reservados.
-              </p>
-            </div>
-
-            <div>
-              <p className="font-semibold text-white/90">Guatemala</p>
-              <p className="text-white/75">(+502) 2477 3400</p>
-              <p className="text-white/70">
-                6a Av 7-39 zona 10, Edif. Las Brisas, Of. 302
-              </p>
-            </div>
-          </div>
-          <div className="border-t border-white/10">
+        <footer className="bg-[#082349] text-white">
+          <div className="max-w-7x
