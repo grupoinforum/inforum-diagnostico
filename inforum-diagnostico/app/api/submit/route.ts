@@ -21,11 +21,20 @@ const BREVO_PASS = process.env.BREVO_SMTP_PASS;
 const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 
 async function pd(path: string, init?: RequestInit) {
-  if (!PD_DOMAIN || !PD_API) throw new Error("Faltan variables de Pipedrive (PIPEDRIVE_DOMAIN / PIPEDRIVE_API_KEY)");
+  if (!PD_DOMAIN || !PD_API) throw new Error("Faltan PIPEDRIVE_DOMAIN / PIPEDRIVE_API_KEY");
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`Pipedrive ${path} → ${res.status} ${await res.text()}`);
-  return res.json();
+  const text = await res.text();
+  if (!res.ok) {
+    // Propaga el error legible para verlo en el Response del cliente
+    throw new Error(`Pipedrive ${path} → ${res.status} ${text}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    // por si alguna respuesta no es JSON
+    return text as any;
+  }
 }
 
 async function sendConfirmation(data: Payload) {
@@ -62,13 +71,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    // 1) Buscar/crear Persona
+    // 1) Buscar/crear Persona por email
     let personId: number | null = null;
     try {
       const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
-      const item = search?.data?.items?.[0];
+      const item = (search as any)?.data?.items?.[0];
       if (item?.item?.id) personId = item.item.id;
-    } catch {}
+    } catch (e) {
+      console.error("[persons/search] ", (e as Error).message);
+    }
+
     if (!personId) {
       const created = await pd(`/persons`, {
         method: "POST",
@@ -78,41 +90,45 @@ export async function POST(req: Request) {
           email: [{ value: data.email, primary: true, label: "work" }],
         }),
       });
-      personId = created?.data?.id;
+      personId = (created as any)?.data?.id;
     }
 
-    // 2) Buscar/crear Organización
+    // 2) (Opcional) Buscar/crear Organización (NO la usaremos para el lead por ahora)
     let orgId: number | undefined;
     if (data.company) {
       try {
         const s = await pd(`/organizations/search?term=${encodeURIComponent(data.company)}&exact_match=true`);
-        const it = s?.data?.items?.[0];
+        const it = (s as any)?.data?.items?.[0];
         orgId = it?.item?.id;
-      } catch {}
+      } catch (e) {
+        console.error("[organizations/search] ", (e as Error).message);
+      }
       if (!orgId) {
-        const o = await pd(`/organizations`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: data.company }),
-        });
-        orgId = o?.data?.id;
+        try {
+          const o = await pd(`/organizations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: data.company }),
+          });
+          orgId = (o as any)?.data?.id;
+        } catch (e) {
+          console.error("[organizations POST] ", (e as Error).message);
+        }
       }
     }
 
-    // 3) Crear Lead (⚠️ value DEBE ser objeto o se omite)
+    // 3) Crear Lead con el payload mínimo válido (solo title + person_id)
+    //    * Quitamos value / organization_id para evitar validaciones 400.
     await pd(`/leads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: `Diagnóstico – ${data.name}`,
-        person_id: personId!,                // OK
-        organization_id: orgId,              // usar organization_id para leads
-        // Omites value, o si quieres dejarlo:
-        value: { amount: 0, currency: "USD" } // <- antes era número; ahora objeto
+        person_id: personId!, // numérico
       }),
     });
 
-    // 4) Nota con país y respuestas
+    // 4) Nota con país y respuestas (la dejamos vinculada a persona + org si existiera)
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -126,14 +142,21 @@ export async function POST(req: Request) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, person_id: personId!, org_id: orgId }),
       });
-    } catch {}
+    } catch (e) {
+      console.error("[notes POST] ", (e as Error).message);
+    }
 
-    // 5) Enviar correo de confirmación al contacto
-    await sendConfirmation(data);
+    // 5) Enviar correo de confirmación al contacto (no bloquea el OK)
+    try {
+      await sendConfirmation(data);
+    } catch (e) {
+      console.error("[email] ", (e as Error).message);
+    }
 
     return NextResponse.json({ ok: true, message: "Lead creado y correo enviado" });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
-    return NextResponse.json({ ok: false, error: "No se logró enviar" }, { status: 500 });
+    // Devuelve el error real para que lo veas en Network → Response
+    return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
   }
 }
