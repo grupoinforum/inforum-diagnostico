@@ -1,23 +1,21 @@
 // app/api/submit/route.ts
-export const runtime = "nodejs";         // necesario si usas Nodemailer
-export const dynamic = "force-dynamic";  // evita cache SSR
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 
 type Payload = {
-  name: string;          // Nombre
-  company?: string;      // Empresa
-  email: string;         // Correo empresarial
-  country?: string;      // País
-  answers?: any;         // Resumen/resultado del cuestionario
+  name: string;          
+  company?: string;      
+  email: string;         
+  country?: string;      
+  answers?: any;         
 };
 
 const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN;
 const PD_API = process.env.PIPEDRIVE_API_KEY;
 const RESEND = process.env.RESEND_API_KEY;
 const NOTIFY_TO = process.env.NOTIFY_TO || "ventas@tudominio.com";
-const BREVO_USER = process.env.BREVO_SMTP_USER;
-const BREVO_PASS = process.env.BREVO_SMTP_PASS;
 
 async function pd(path: string, init?: RequestInit) {
   if (!PD_DOMAIN || !PD_API) throw new Error("Faltan variables de Pipedrive");
@@ -28,52 +26,30 @@ async function pd(path: string, init?: RequestInit) {
 }
 
 async function sendEmail(data: Payload) {
+  if (!RESEND) return; // no rompe si no está configurado
+
   const html = `
     <h2>Nuevo lead de Diagnóstico</h2>
     <p><b>Nombre:</b> ${data.name}</p>
     ${data.company ? `<p><b>Empresa:</b> ${data.company}</p>` : ""}
     <p><b>Email:</b> ${data.email}</p>
     ${data.country ? `<p><b>País:</b> ${data.country}</p>` : ""}
-    ${
-      data.answers
-        ? `<pre style="background:#f6f6f6;padding:12px;border-radius:8px">${JSON.stringify(data.answers, null, 2)}</pre>`
-        : ""
-    }
+    ${data.answers ? `<pre style="background:#f6f6f6;padding:12px;border-radius:8px">${JSON.stringify(data.answers, null, 2)}</pre>` : ""}
   `;
 
-  // A) Resend
-  if (RESEND) {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Inforum <no-reply@tudominio.com>",
-        to: [NOTIFY_TO],
-        subject: "Nuevo lead del cuestionario",
-        html,
-      }),
-    });
-    return;
-  }
-
-  // B) Brevo SMTP (requiere instalar nodemailer)
-  if (BREVO_USER && BREVO_PASS) {
-    const nodemailer = await import("nodemailer");
-    const transporter = nodemailer.createTransport({
-      host: "smtp-relay.brevo.com",
-      port: 587,
-      auth: { user: BREVO_USER, pass: BREVO_PASS },
-    });
-    await transporter.sendMail({
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       from: "Inforum <no-reply@tudominio.com>",
-      to: NOTIFY_TO,
+      to: [NOTIFY_TO],
       subject: "Nuevo lead del cuestionario",
       html,
-    });
-  }
+    }),
+  });
 }
 
 export async function POST(req: Request) {
