@@ -3,12 +3,19 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-}
+/* Base look */
+body { @apply bg-brand-bg text-slate-900; }
 
-body {
-  @apply bg-white text-slate-900;
-}
+@layer components {
+  .card { @apply bg-white rounded-2xl shadow-soft border border-slate-200; }
 
-a { @apply underline text-blue-600; }
+  .btn { @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl font-medium transition; }
+  .btn-primary { @apply btn bg-brand-orange text-white hover:brightness-95; }
+  .btn-secondary { @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200; }
+
+  .input { @apply w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-orange; }
+  .label { @apply block mb-1 text-sm font-medium text-slate-700; }
+
+  .progress-track { @apply w-full h-2 bg-slate-200 rounded-2xl; }
+  .progress-fill  { @apply h-2 rounded-2xl bg-brand-orange transition-all; }
+}
