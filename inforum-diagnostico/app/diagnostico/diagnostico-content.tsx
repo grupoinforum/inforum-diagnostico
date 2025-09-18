@@ -115,6 +115,28 @@ function isCorporateEmail(email: string) {
   return !FREE_EMAIL_DOMAINS.includes(domain);
 }
 
+/* =========================
+   HELPER: Enviar a la API
+   ========================= */
+async function submitDiagnostico(payload: {
+  name: string;
+  company?: string;
+  email: string;
+  country?: string;
+  answers?: any;
+}) {
+  const res = await fetch("/api/submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || `Error ${res.status}`);
+  }
+  return json; // { ok: true }
+}
+
 export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
@@ -164,6 +186,9 @@ export default function DiagnosticoContent() {
     );
   }, [form]);
 
+  /* =========================
+     SUBMIT final (usa helper)
+     ========================= */
   const onSubmit = async () => {
     setErrorMsg(null);
     if (!form.consent) {
@@ -174,20 +199,41 @@ export default function DiagnosticoContent() {
     setServerResp(null);
 
     try {
-      const res = await fetch("/api/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          answers: Object.values(answers),
-          contact: form,
-          utms,
-        }),
+      // Construir respuestas de forma compacta
+      const finalAnswers = Object.values(answers);
+
+      // Convertir código de país a etiqueta legible (ej. GT -> Guatemala)
+      const countryLabel = COUNTRIES.find(c => c.value === form.country)?.label || form.country;
+
+      // Payload que espera la API (/api/submit)
+      const payload = {
+        name: form.name,
+        company: form.company,
+        email: form.email,
+        country: countryLabel,
+        answers: {
+          utms,         // útil para notas en Pipedrive
+          items: finalAnswers,
+        },
+      };
+
+      await submitDiagnostico(payload);
+
+      // Como el endpoint devuelve { ok: true }, armamos el mensaje localmente
+      setServerResp({
+        ok: true,
+        title: "¡Listo! Aquí está tu resultado",
+        message:
+          "Hemos registrado tus respuestas y te contactaremos en breve. Si calificas, puedes escribirnos por WhatsApp para acelerar el proceso.",
+        resultKey: "califica",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Error al enviar");
-      setServerResp({ ok: true, message: data.message, title: data.title, resultKey: data.resultKey });
     } catch (e: any) {
-      setServerResp({ ok: false, message: e.message || "Error", title: "Error", resultKey: "nocupo" });
+      setServerResp({
+        ok: false,
+        title: "Error",
+        message: e?.message || "No se logró enviar. Intenta de nuevo.",
+        resultKey: "nocupo",
+      });
     } finally {
       setLoading(false);
     }
@@ -202,7 +248,12 @@ export default function DiagnosticoContent() {
         <h1 className="text-2xl font-semibold mb-2">{serverResp.title}</h1>
         <p className="text-gray-700 mb-6">{serverResp.message}</p>
         {serverResp.resultKey === "califica" ? (
-          <a href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico" className="inline-block px-5 py-3 rounded-2xl shadow bg-blue-600 text-white">Ir a WhatsApp</a>
+          <a
+            href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico"
+            className="inline-block px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
+          >
+            Ir a WhatsApp
+          </a>
         ) : null}
       </main>
     );
