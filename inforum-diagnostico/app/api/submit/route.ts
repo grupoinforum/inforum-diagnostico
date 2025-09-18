@@ -1,235 +1,157 @@
-import type { NextRequest } from "next/server";
+// app/api/submit/route.ts
+export const runtime = "nodejs";         // necesario si usas Nodemailer
+export const dynamic = "force-dynamic";  // evita cache SSR
 
-export const runtime = "nodejs";
+import { NextResponse } from "next/server";
 
-// --- Utilidades ---
-const FREE_EMAIL_DOMAINS = [
-  "gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com", "proton.me", "aol.com", "live.com", "msn.com"
-];
-function isCorporateEmail(email: string) {
-  const domain = email.split("@").pop()?.toLowerCase().trim();
-  return !!domain && !FREE_EMAIL_DOMAINS.includes(domain);
-}
-
-// Rate limit simple (en memoria)
-const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hora
-const RATE_MAX = 5; // 5 envíos por IP por hora
-const ipHits = new Map<string, { count: number; resetAt: number }>();
-
-function checkRate(ip: string) {
-  const now = Date.now();
-  const rec = ipHits.get(ip);
-  if (!rec || now > rec.resetAt) {
-    ipHits.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return true;
-  }
-  if (rec.count >= RATE_MAX) return false;
-  rec.count += 1; ipHits.set(ip, rec); return true;
-}
-
-// Pipedrive config
-const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN!;
-const PIPEDRIVE_BASE = "https://api.pipedrive.com/v1";
-
-// Brevo config
-const BREVO_API_KEY = process.env.BREVO_API_KEY!;
-const EMAIL_FROM = process.env.EMAIL_FROM!;
-const EMAIL_BCC = process.env.EMAIL_BCC || "";
-
-// reCAPTCHA (opcional)
-const RECAPTCHA_SECRET = process.env.RECAPTCHA_SECRET || "";
-
-// Custom fields de Pipedrive (Deal)
-const CF_INDUSTRIA = process.env.PD_CF_INDUSTRIA || "";
-const CF_SISTEMA = process.env.PD_CF_SISTEMA || "";
-
-// Pipeline IDs por país
-const PIPELINES: Record<string, number> = {
-  GT: 1, SV: 2, HN: 3, DO: 4, EC: 5, PA: 6,
+type Payload = {
+  name: string;          // Nombre
+  company?: string;      // Empresa
+  email: string;         // Correo empresarial
+  country?: string;      // País
+  answers?: any;         // Resumen/resultado del cuestionario
 };
 
-// --- Helpers Pipedrive ---
+const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
+const PD_API = process.env.PIPEDRIVE_API_KEY!;
+const RESEND = process.env.RESEND_API_KEY;
+const NOTIFY_TO = process.env.NOTIFY_TO || "ventas@tudominio.com";
+const BREVO_USER = process.env.BREVO_SMTP_USER;
+const BREVO_PASS = process.env.BREVO_SMTP_PASS;
+
 async function pd(path: string, init?: RequestInit) {
-  const url = `${PIPEDRIVE_BASE}${path}${path.includes("?") ? "&" : "?"}api_token=${PIPEDRIVE_API_TOKEN}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok || (json && json.success === false)) {
-    throw new Error(json?.error || json?.message || `Pipedrive error (${res.status})`);
+  const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
+  const res = await fetch(url, init);
+  if (!res.ok) throw new Error(`Pipedrive ${path} -> ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+async function sendEmail(data: Payload) {
+  const html = `
+    <h2>Nuevo lead de Diagnóstico</h2>
+    <p><b>Nombre:</b> ${data.name}</p>
+    ${data.company ? `<p><b>Empresa:</b> ${data.company}</p>` : ""}
+    <p><b>Email:</b> ${data.email}</p>
+    ${data.country ? `<p><b>País:</b> ${data.country}</p>` : ""}
+    ${
+      data.answers
+        ? `<pre style="background:#f6f6f6;padding:12px;border-radius:8px">${JSON.stringify(data.answers, null, 2)}</pre>`
+        : ""
+    }
+  `;
+
+  // A) Resend (simple, sin dependencias)
+  if (RESEND) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: "Inforum <no-reply@tudominio.com>",
+        to: [NOTIFY_TO],
+        subject: "Nuevo lead del cuestionario",
+        html,
+      }),
+    });
+    return;
   }
-  return json;
-}
 
-async function createOrganization(name: string, extras: Record<string, any>) {
-  return pd(`/organizations`, { method: "POST", body: JSON.stringify({ name, ...extras }) });
-}
-
-async function createPerson(name: string, email: string, org_id?: number) {
-  return pd(`/persons`, { method: "POST", body: JSON.stringify({ name, email, org_id }) });
-}
-
-async function createDeal(data: Record<string, any>) {
-  return pd(`/deals`, { method: "POST", body: JSON.stringify(data) });
-}
-
-async function addNote(deal_id: number, content: string) {
-  return pd(`/notes`, { method: "POST", body: JSON.stringify({ deal_id, content }) });
-}
-
-// --- Brevo ---
-async function sendBrevoEmail({ to, subject, html, bcc = EMAIL_BCC }: { to: string; subject: string; html: string; bcc?: string }) {
-  const payload = {
-    sender: { email: EMAIL_FROM },
-    to: [{ email: to }],
-    subject,
-    htmlContent: html,
-    bcc: bcc ? [{ email: bcc }] : undefined,
-  };
-
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": BREVO_API_KEY,
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Brevo error: ${res.status} ${t}`);
+  // B) Brevo SMTP (requiere instalar nodemailer)
+  if (BREVO_USER && BREVO_PASS) {
+    const nodemailer = await import("nodemailer");
+    const transporter = nodemailer.createTransport({
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      auth: { user: BREVO_USER, pass: BREVO_PASS },
+    });
+    await transporter.sendMail({
+      from: "Inforum <no-reply@tudominio.com>",
+      to: NOTIFY_TO,
+      subject: "Nuevo lead del cuestionario",
+      html,
+    });
   }
 }
 
-function buildEmailTemplates(resultKey: "califica" | "nocupo", name: string) {
-  if (resultKey === "califica") {
-    return {
-      subject: "Tu diagnóstico: calificas para la asesoría sin costo",
-      html: `
-        <div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; font-size:16px; color:#111">
-          <p>Hola ${name},</p>
-          <p>¡Felicidades! De acuerdo con tu diagnóstico, <b>calificas</b> para nuestra asesoría sin costo.</p>
-          <p>Un especialista te contactará en breve. Si prefieres, puedes escribirnos ahora mismo por WhatsApp:</p>
-          <p><a href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico">Ir a WhatsApp</a></p>
-          <p>— Equipo Grupo Inforum</p>
-        </div>`,
-    };
-  }
-  return {
-    subject: "Tu diagnóstico: por ahora sin cupo",
-    html: `
-      <div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; font-size:16px; color:#111">
-        <p>Hola ${name},</p>
-        <p>Gracias por completar el diagnóstico. Por el momento nos encontramos sin cupo para la asesoría sin costo.</p>
-        <p>Te enviaremos información útil sobre nuestros servicios y quedamos atentos a apoyarte cuando se habiliten nuevos cupos.</p>
-        <p>— Equipo Grupo Inforum</p>
-      </div>`,
-  };
-}
-
-function decideResult(answers: { score: 1 | 2 }[]): { resultKey: "califica" | "nocupo"; title: string; message: string } {
-  const countOnes = answers.reduce((acc, a) => acc + (a.score === 1 ? 1 : 0), 0);
-  if (countOnes <= 3) {
-    return {
-      resultKey: "califica",
-      title: "¡Felicidades! Calificas para una asesoría sin costo.",
-      message: "Te hemos enviado un correo con los siguientes pasos para agendar una primera sesión.",
-    };
-  }
-  return {
-    resultKey: "nocupo",
-    title: "Lo sentimos, por ahora sin cupo",
-    message: "Por el momento nos encontramos sin cupo para la asesoría. Te hemos enviado información a tu correo.",
-  };
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0] || "unknown";
-    if (!checkRate(ip)) {
-      return new Response(JSON.stringify({ message: "Demasiados intentos. Intenta más tarde." }), { status: 429 });
+    if (!PD_DOMAIN || !PD_API) throw new Error("Faltan PIPEDRIVE_DOMAIN o PIPEDRIVE_API_KEY");
+    const data = (await req.json()) as Payload;
+    if (!data?.name || !data?.email) {
+      return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    const body = await req.json();
-    const { answers, contact, utms } = body as {
-      answers: { id: string; value: string; score: 1 | 2; extraText?: string }[];
-      contact: { name: string; company: string; email: string; country: keyof typeof PIPELINES; consent: boolean };
-      utms?: Record<string, string>;
-      recaptchaToken?: string;
-    };
-
-    if (!answers || answers.length !== 7) throw new Error("Respuestas inválidas");
-    if (!contact?.name || !contact?.company || !contact?.email || !contact?.country) throw new Error("Datos de contacto incompletos");
-    if (!isCorporateEmail(contact.email)) throw new Error("Usa un correo corporativo (no gratuito)");
-
-    // reCAPTCHA opcional
-    if (RECAPTCHA_SECRET && body.recaptchaToken) {
-      const v = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+    // 1) Buscar/crear Persona por email
+    let personId: number | null = null;
+    try {
+      const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
+      const item = search?.data?.items?.[0];
+      if (item?.item?.id) personId = item.item.id;
+    } catch {}
+    if (!personId) {
+      const created = await pd(`/persons`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ secret: RECAPTCHA_SECRET, response: body.recaptchaToken }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          email: [{ value: data.email, primary: true, label: "work" }],
+        }),
       });
-      const vjson = await v.json();
-      if (!vjson.success || (typeof vjson.score === "number" && vjson.score < 0.7)) {
-        return new Response(JSON.stringify({ message: "No pudimos verificar que seas humano." }), { status: 400 });
+      personId = created?.data?.id;
+    }
+
+    // 2) Buscar/crear Organización por Empresa
+    let orgId: number | undefined;
+    if (data.company) {
+      try {
+        const s = await pd(`/organizations/search?term=${encodeURIComponent(data.company)}&exact_match=true`);
+        const it = s?.data?.items?.[0];
+        orgId = it?.item?.id;
+      } catch {}
+      if (!orgId) {
+        const o = await pd(`/organizations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: data.company }),
+        });
+        orgId = o?.data?.id;
       }
     }
 
-    // Determinar resultado
-    const decision = decideResult(answers);
-
-    // Crear en Pipedrive: Organization → Person → Deal
-    const orgName = contact.company;
-    const org = await createOrganization(orgName, {
-      ...(CF_INDUSTRIA ? { [CF_INDUSTRIA]: answers.find(a => a.id === "industria")?.value || "" } : {}),
+    // 3) Crear Lead
+    await pd(`/leads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: `Diagnóstico – ${data.name}`,
+        person_id: personId!,
+        org_id: orgId,
+        value: 0,
+        currency: "USD",
+      }),
     });
-    const orgId = org?.data?.id as number | undefined;
 
-    const person = await createPerson(contact.name, contact.email, orgId);
-    const personId = person?.data?.id as number | undefined;
+    // 4) Nota con país y respuestas (útil si aún no tienes campos personalizados)
+    try {
+      const content =
+        `Formulario diagnóstico\n` +
+        `• Nombre: ${data.name}\n` +
+        (data.company ? `• Empresa: ${data.company}\n` : "") +
+        `• Email: ${data.email}\n` +
+        (data.country ? `• País: ${data.country}\n` : "") +
+        (data.answers ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}` : "");
+      await pd(`/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, person_id: personId!, org_id: orgId }),
+      });
+    } catch {}
 
-    const pipeline_id = PIPELINES[contact.country] || 1;
+    // 5) Email de notificación (si configuraste Resend o Brevo)
+    await sendEmail(data);
 
-    const dealTitle = `Diagnóstico — ${orgName}`;
-    const dealPayload: Record<string, any> = {
-      title: dealTitle,
-      pipeline_id,
-      person_id: personId,
-      org_id: orgId,
-      value: 0,
-      currency: "USD",
-      ...(CF_INDUSTRIA ? { [CF_INDUSTRIA]: answers.find(a => a.id === "industria")?.value || "" } : {}),
-      ...(CF_SISTEMA ? { [CF_SISTEMA]: answers.find(a => a.id === "erp")?.value || "" } : {}),
-    };
-
-    const deal = await createDeal(dealPayload);
-    const dealId = deal?.data?.id as number;
-
-    // Nota con UTMs y respuestas
-    const noteLines: string[] = [];
-    noteLines.push(`Resultado: ${decision.resultKey}`);
-    if (utms && Object.keys(utms).length) {
-      noteLines.push("UTMs:");
-      for (const [k, v] of Object.entries(utms)) noteLines.push(`- ${k}: ${v}`);
-    }
-    noteLines.push("Respuestas:");
-    answers.forEach(a => noteLines.push(`- ${a.id}: ${a.value}${a.extraText ? ` (${a.extraText})` : ""} [score ${a.score}]`));
-    await addNote(dealId, noteLines.join("\n"));
-
-    // Enviar email transaccional
-    const emailTpl = buildEmailTemplates(decision.resultKey, contact.name);
-    await sendBrevoEmail({ to: contact.email, subject: emailTpl.subject, html: emailTpl.html });
-
-    return new Response(JSON.stringify({
-      ok: true,
-      resultKey: decision.resultKey,
-      title: decision.title,
-      message: decision.message,
-      dealId,
-    }), { status: 200 });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ message: err.message || "Error" }), { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    console.error("[/api/submit] Error:", e?.message || e);
+    return NextResponse.json({ ok: false, error: "No se logró enviar" }, { status: 500 });
   }
 }
