@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 <Image
   src="/logo-inforum.png"
   alt="Inforum"
