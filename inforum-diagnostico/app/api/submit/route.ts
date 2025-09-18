@@ -5,50 +5,80 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 
 type Payload = {
-  name: string;          
-  company?: string;      
-  email: string;         
-  country?: string;      
-  answers?: any;         
+  name: string;
+  company?: string;
+  email: string;
+  country?: string;
+  answers?: any; // tus respuestas/resumen
 };
 
-const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN;
-const PD_API = process.env.PIPEDRIVE_API_KEY;
-const RESEND = process.env.RESEND_API_KEY;
-const NOTIFY_TO = process.env.NOTIFY_TO || "ventas@tudominio.com";
+const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN;          // ej: "inforum"
+const PD_API = process.env.PIPEDRIVE_API_KEY;            // token de Pipedrive
+
+// Brevo SMTP (usa la API key como password)
+const BREVO_USER = process.env.BREVO_SMTP_USER || process.env.EMAIL_FROM; // normalmente tu remitente en Brevo
+const BREVO_PASS = process.env.BREVO_SMTP_PASS || process.env.BREVO_API_KEY; // API key de Brevo
+const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <no-reply@tudominio.com>"; // remitente visible
 
 async function pd(path: string, init?: RequestInit) {
-  if (!PD_DOMAIN || !PD_API) throw new Error("Faltan variables de Pipedrive");
+  if (!PD_DOMAIN || !PD_API) throw new Error("Faltan PIPEDRIVE_DOMAIN / PIPEDRIVE_API_KEY");
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
   if (!res.ok) throw new Error(`Pipedrive ${path} -> ${res.status} ${await res.text()}`);
   return res.json();
 }
 
-async function sendEmail(data: Payload) {
-  if (!RESEND) return; // no rompe si no está configurado
+// Email SOLO al contacto que llenó el formulario
+async function sendConfirmationToContact(data: Payload) {
+  if (!BREVO_USER || !BREVO_PASS) {
+    console.warn("Brevo SMTP no configurado (BREVO_SMTP_USER/BREVO_SMTP_PASS o BREVO_API_KEY). No se envía email.");
+    return;
+  }
+  const nodemailer = await import("nodemailer");
+  const transporter = nodemailer.createTransport({
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    auth: { user: BREVO_USER, pass: BREVO_PASS },
+  });
 
+  const subject = "Hemos recibido tu diagnóstico — Inforum";
   const html = `
-    <h2>Nuevo lead de Diagnóstico</h2>
-    <p><b>Nombre:</b> ${data.name}</p>
-    ${data.company ? `<p><b>Empresa:</b> ${data.company}</p>` : ""}
-    <p><b>Email:</b> ${data.email}</p>
-    ${data.country ? `<p><b>País:</b> ${data.country}</p>` : ""}
-    ${data.answers ? `<pre style="background:#f6f6f6;padding:12px;border-radius:8px">${JSON.stringify(data.answers, null, 2)}</pre>` : ""}
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;">
+      <h2>¡Gracias, ${data.name}!</h2>
+      <p>Recibimos tus datos del diagnóstico${
+        data.company ? ` para <b>${data.company}</b>` : ""
+      } y fueron procesados con éxito.</p>
+      <p>Pronto nos pondremos en contacto contigo${
+        data.country ? ` en <b>${data.country}</b>` : ""
+      } para comentarte los siguientes pasos.</p>
+      ${
+        data.answers
+          ? `<p style="margin-top:16px;"><b>Resumen enviado:</b></p>
+             <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap;">${JSON.stringify(
+               data.answers,
+               null,
+               2
+             )}</pre>`
+          : ""
+      }
+      <p style="margin-top:16px;">Si deseas escribirnos directamente, puedes responder este correo.</p>
+      <p style="margin-top:24px;">— Equipo Inforum</p>
+    </div>
   `;
+  const text =
+    `Gracias, ${data.name}.\n` +
+    `Recibimos tus datos del diagnóstico${data.company ? ` para ${data.company}` : ""} y fueron procesados con éxito.\n` +
+    `Pronto nos pondremos en contacto contigo${data.country ? ` en ${data.country}` : ""}.\n` +
+    (data.answers ? `\nResumen enviado:\n${JSON.stringify(data.answers, null, 2)}\n` : "") +
+    `\n— Equipo Inforum`;
 
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${RESEND}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Inforum <no-reply@tudominio.com>",
-      to: [NOTIFY_TO],
-      subject: "Nuevo lead del cuestionario",
-      html,
-    }),
+  await transporter.sendMail({
+    from: EMAIL_FROM,
+    to: data.email,         // 👈 SOLO al contacto
+    subject,
+    html,
+    text,
+    replyTo: EMAIL_FROM,    // si responde, llega a tu remitente
   });
 }
 
@@ -57,18 +87,13 @@ export async function POST(req: Request) {
     const data = (await req.json()) as Payload;
 
     if (!data?.name || !data?.email) {
-      return NextResponse.json(
-        { ok: false, error: "Faltan nombre o email" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    // 1) Buscar/crear Persona
+    // 1) Buscar/crear Persona por email
     let personId: number | null = null;
     try {
-      const search = await pd(
-        `/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`
-      );
+      const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
       const item = search?.data?.items?.[0];
       if (item?.item?.id) personId = item.item.id;
     } catch {}
@@ -84,15 +109,11 @@ export async function POST(req: Request) {
       personId = created?.data?.id;
     }
 
-    // 2) Buscar/crear Organización
+    // 2) Buscar/crear Organización por Empresa
     let orgId: number | undefined;
     if (data.company) {
       try {
-        const s = await pd(
-          `/organizations/search?term=${encodeURIComponent(
-            data.company
-          )}&exact_match=true`
-        );
+        const s = await pd(`/organizations/search?term=${encodeURIComponent(data.company)}&exact_match=true`);
         const it = s?.data?.items?.[0];
         orgId = it?.item?.id;
       } catch {}
@@ -119,7 +140,7 @@ export async function POST(req: Request) {
       }),
     });
 
-    // 4) Nota con país y respuestas
+    // 4) Dejar una nota con país y respuestas (útil si aún no tienes campos personalizados)
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -127,9 +148,7 @@ export async function POST(req: Request) {
         (data.company ? `• Empresa: ${data.company}\n` : "") +
         `• Email: ${data.email}\n` +
         (data.country ? `• País: ${data.country}\n` : "") +
-        (data.answers
-          ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}`
-          : "");
+        (data.answers ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}` : "");
       await pd(`/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,15 +156,12 @@ export async function POST(req: Request) {
       });
     } catch {}
 
-    // 5) Email
-    await sendEmail(data);
+    // 5) Correo de confirmación al contacto
+    await sendConfirmationToContact(data);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
-    return NextResponse.json(
-      { ok: false, error: "No se logró enviar" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: "No se logró enviar" }, { status: 500 });
   }
 }
