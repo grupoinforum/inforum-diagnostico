@@ -39,10 +39,13 @@ const STAGE_CAPA1 = {
   PA: Number(process.env.PD_STAGE_PA_CAPA1 ?? 31),
 } satisfies Record<string, number>;
 
-// Normaliza etiqueta país -> código
+// Normaliza etiqueta país -> código (acepta "Guatemala" / "GT", etc.)
 function countryToCode(label?: string): keyof typeof PIPELINES {
   if (!label) return "GT";
   const x = label.trim().toUpperCase();
+
+  // Si ya viene ISO
+  if (x === "GT" || x === "SV" || x === "HN" || x === "DO" || x === "EC" || x === "PA") return x as any;
 
   const MAP: Record<string, keyof typeof PIPELINES> = {
     "GUATEMALA": "GT",
@@ -150,6 +153,7 @@ export async function POST(req: Request) {
     }
 
     // Crear DEAL en Capa 1 del pipeline correcto
+    console.log("[submit] creando DEAL", { country: data.country, cc, pipeline_id, stage_id });
     await pd(`/deals`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
