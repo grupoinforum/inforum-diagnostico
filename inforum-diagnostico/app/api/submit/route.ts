@@ -8,7 +8,7 @@ type Payload = {
   name: string;
   company?: string;
   email: string;
-  country?: string;     // etiqueta seleccionada en el form (ej. "Guatemala")
+  country?: string; // etiqueta del select (ej. "Guatemala")
   answers?: any;
 };
 
@@ -44,8 +44,8 @@ function countryToCode(label?: string): keyof typeof PIPELINES {
   if (!label) return "GT";
   const x = label.trim().toUpperCase();
 
-  // Si ya viene ISO
-  if (x === "GT" || x === "SV" || x === "HN" || x === "DO" || x === "EC" || x === "PA") return x as any;
+  // si ya viene ISO
+  if (["GT", "SV", "HN", "DO", "EC", "PA"].includes(x)) return x as keyof typeof PIPELINES;
 
   const MAP: Record<string, keyof typeof PIPELINES> = {
     "GUATEMALA": "GT",
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       personId = (created as any)?.data?.id;
     }
 
-    // (Opcional) Org por company
+    // (Opcional) org por company
     let orgId: number | undefined;
     if (data.company) {
       try {
@@ -152,20 +152,27 @@ export async function POST(req: Request) {
       }
     }
 
-    // Crear DEAL en Capa 1 del pipeline correcto
+    // --- CREAR DEAL en Capa 1 del pipeline correcto ---
     console.log("[submit] creando DEAL", { country: data.country, cc, pipeline_id, stage_id });
-    await pd(`/deals`, {
+
+    const dealRes = await pd(`/deals`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: `Diagnóstico – ${data.name}`,
-        person_id: personId!,
-        org_id: orgId,
-        pipeline_id,
-        stage_id, // Capa 1
+        person_id: personId!,   // requerido
+        org_id: orgId,          // opcional
+        pipeline_id,            // según país
+        stage_id,               // Capa 1
         value: 0,
-        currency: "GTQ", // ajusta si quieres
+        currency: "GTQ",        // cambia si quieres por país
       }),
+    });
+
+    console.log("[submit] DEAL creado", {
+      id: (dealRes as any)?.data?.id,
+      pipeline_id,
+      stage_id,
     });
 
     // Nota con país y respuestas
@@ -186,9 +193,10 @@ export async function POST(req: Request) {
       console.error("[notes POST]", (e as Error).message);
     }
 
-    // Email de confirmación
+    // Email de confirmación (no bloquea la respuesta)
     try {
       await sendConfirmation(data);
+      console.log("✅ Correo enviado a:", data.email);
     } catch (e) {
       console.error("[email]", (e as Error).message);
     }
