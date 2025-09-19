@@ -1,3 +1,4 @@
+// app/layout.tsx
 import "./globals.css";
 import Image from "next/image";
 import type { Metadata } from "next";
@@ -19,7 +20,7 @@ export default function RootLayout({
         <header className="bg-[#082349] text-white">
           <div className="max-w-7xl mx-auto flex items-center gap-4 px-6 py-3">
             <Image
-              src="/logo-inforum.png"
+              src="/logo-inforum.png" // asegúrate que este archivo exista en /public
               alt="Inforum"
               width={160}
               height={40}
@@ -30,14 +31,19 @@ export default function RootLayout({
           </div>
         </header>
 
-        {/* MAIN */}
+        {/* CONTENIDO */}
         <main className="flex-1">{children}</main>
 
-      <footer className="w-full mt-10">
-  <img
-    src="/footer-inforum.jpg"
-    alt="Footer Inforum"
-    className="w-full object-cover"
-  />
-</footer>
+        {/* FOOTER con tu imagen */}
+        <footer className="w-full mt-10">
+          <img
+            src="/footer.jpg" // pon aquí el nombre exacto del archivo en /public
+            alt="Footer Inforum"
+            className="w-full h-auto object-cover"
+          />
+        </footer>
+      </body>
+    </html>
+  );
+}
 
