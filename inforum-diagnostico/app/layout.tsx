@@ -1,11 +1,9 @@
-// app/layout.tsx
 import "./globals.css";
 import Image from "next/image";
-import type { Metadata } from "next";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Inforum Diagnóstico",
-  description: "Aplicación de diagnóstico de Inforum",
+  description: "Ir directo al cuestionario",
 };
 
 export default function RootLayout({
@@ -16,30 +14,30 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="flex flex-col min-h-screen bg-gray-50">
-        {/* HEADER (sin menú) */}
-        <header className="bg-[#082349] text-white">
-          <div className="max-w-7xl mx-auto flex items-center gap-4 px-6 py-3">
-            <Image
-              src="/logo-inforum.png" // asegúrate que este archivo exista en /public
-              alt="Inforum"
-              width={160}
-              height={40}
-              className="h-10 w-auto object-contain"
-              priority
-            />
-            <span className="text-lg font-semibold">Diagnóstico</span>
-          </div>
+        {/* HEADER */}
+        <header className="bg-[#082349] text-white px-6 py-3 flex items-center">
+          <Image
+            src="/logo-inforum.png"
+            alt="Inforum"
+            width={160}
+            height={40}
+            className="h-10 w-auto object-contain"
+          />
+          <h1 className="ml-3 text-lg font-bold">Diagnóstico</h1>
         </header>
 
         {/* CONTENIDO */}
-        <main className="flex-1">{children}</main>
+        <main className="flex-grow">{children}</main>
 
-        {/* FOOTER con tu imagen */}
-        <footer className="w-full mt-10">
-          <img
-            src="/footer.jpg" // pon aquí el nombre exacto del archivo en /public
+        {/* FOOTER */}
+        <footer className="w-full">
+          <Image
+            src="/footer-inforum.jpg"
             alt="Footer Inforum"
+            width={1920}
+            height={300}
             className="w-full h-auto object-cover"
+            priority
           />
         </footer>
       </body>
