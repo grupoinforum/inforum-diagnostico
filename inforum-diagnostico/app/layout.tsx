@@ -8,19 +8,15 @@ export const metadata: Metadata = {
   description: "Ir directo al cuestionario",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
       <body className="flex flex-col min-h-screen bg-gray-50">
-        {/* ===== HEADER (como antes) ===== */}
+        {/* HEADER */}
         <header className="bg-[#082349] text-white">
           <div className="max-w-7xl mx-auto flex items-center gap-4 px-6 py-3">
             <Image
-              src="/logo-inforum.png"   // Debe existir en /public
+              src="/logo-inforum.png"
               alt="Inforum"
               width={160}
               height={40}
@@ -31,19 +27,22 @@ export default function RootLayout({
           </div>
         </header>
 
-        {/* ===== CONTENIDO ===== */}
-        <main className="flex-grow">{children}</main>
+        {/* CONTENIDO: añade padding-bottom para que el botón no choque con el footer */}
+        <main className="flex-grow pb-24 sm:pb-28 md:pb-32">{children}</main>
 
-        {/* ===== FOOTER (imagen nueva) ===== */}
+        {/* FOOTER: altura responsive más baja en móvil */}
         <footer className="w-full mt-auto">
-          <Image
-            src="/footer-web.jpg"       // Nombre EXACTO en /public
-            alt="Footer Inforum"
-            width={1920}
-            height={260}
-            className="w-full h-auto object-cover"
-            priority
-          />
+          {/* Contenedor con altura distinta por breakpoint */}
+          <div className="relative w-full h-24 sm:h-36 md:h-48 lg:h-60">
+            <Image
+              src="/footer-web.jpg"
+              alt="Footer Inforum"
+              fill
+              sizes="100vw"
+              className="object-cover"
+              priority
+            />
+          </div>
         </footer>
       </body>
     </html>
