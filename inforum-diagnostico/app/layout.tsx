@@ -16,11 +16,11 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="flex flex-col min-h-screen bg-gray-50">
-        {/* HEADER (vuelve arriba) */}
+        {/* ===== HEADER (como antes) ===== */}
         <header className="bg-[#082349] text-white">
           <div className="max-w-7xl mx-auto flex items-center gap-4 px-6 py-3">
             <Image
-              src="/logo-inforum.png"           // Debe existir en /public
+              src="/logo-inforum.png"   // Debe existir en /public
               alt="Inforum"
               width={160}
               height={40}
@@ -31,13 +31,13 @@ export default function RootLayout({
           </div>
         </header>
 
-        {/* CONTENIDO */}
+        {/* ===== CONTENIDO ===== */}
         <main className="flex-grow">{children}</main>
 
-        {/* FOOTER */}
+        {/* ===== FOOTER (imagen nueva) ===== */}
         <footer className="w-full mt-auto">
           <Image
-            src="/footer-web.jpg"               // Tu imagen nueva en /public
+            src="/footer-web.jpg"       // Nombre EXACTO en /public
             alt="Footer Inforum"
             width={1920}
             height={260}
@@ -49,3 +49,4 @@ export default function RootLayout({
     </html>
   );
 }
+
