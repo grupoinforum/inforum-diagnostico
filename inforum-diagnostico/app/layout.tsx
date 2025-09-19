@@ -8,8 +8,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Contenido principal */}
         <main className="flex-grow">{children}</main>
 
-        {/* Footer con la imagen */}
-        <footer className="w-full">
+        {/* Footer */}
+        <footer className="w-full mt-auto">
           <Image
             src="/footer-web.jpg"
             alt="Footer Inforum"
@@ -23,5 +23,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-
-
