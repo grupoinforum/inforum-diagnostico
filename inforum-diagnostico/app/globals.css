@@ -7,16 +7,21 @@
   -webkit-font-smoothing:antialiased;
 }
 
-/* === Header === */
-.topbar{ background:#082349; color:#fff; }
-.topbar__inner{
-  max-width:1120px;
-  margin:0 auto;
-  display:flex; align-items:center; gap:16px;
-  padding:12px 24px;
-}
-.logo{ height:36px; width:auto; object-fit:contain; }
-.title{ font-size:18px; font-weight:700; margin:0; }
+// dentro de app/layout.tsx
+
+<header className="topbar">
+  <div className="topbar__inner">
+    <Image
+      src="/logo-inforum.png"
+      alt="Inforum"
+      width={160}
+      height={36}
+      className="logo"
+      priority
+    />
+    <h1 className="title">Diagnóstico</h1>
+  </div>
+</header>
 
 /* === Contenido (con padding inferior para no chocar con el footer) === */
 .content-wrap{
