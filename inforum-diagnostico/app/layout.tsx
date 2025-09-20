@@ -12,21 +12,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className="page-shell">
-        {/* HEADER */}
-        <header className="topbar">
-          <div className="topbar__inner">
-            <Image
-              src="/logo-inforum.png"
-              alt="Inforum"
-              width={160}
-              height={36}
-              className="logo"
-              priority
-            />
-            <h1 className="title">Diagnóstico</h1>
-          </div>
-        </header>
-
         {/* CONTENIDO */}
         <main id="content" className="content-wrap">
           {children}
@@ -50,4 +35,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-
