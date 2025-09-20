@@ -1,29 +1,13 @@
-/* === Shell general === */
+/* === Base del layout === */
 .page-shell{
   display:flex;
   flex-direction:column;
   min-height:100vh;
-  background:#f9fafb; /* gris muy claro */
+  background:#f9fafb;
   -webkit-font-smoothing:antialiased;
 }
 
-// dentro de app/layout.tsx
-
-<header className="topbar">
-  <div className="topbar__inner">
-    <Image
-      src="/logo-inforum.png"
-      alt="Inforum"
-      width={160}
-      height={36}
-      className="logo"
-      priority
-    />
-    <h1 className="title">Diagnóstico</h1>
-  </div>
-</header>
-
-/* === Contenido (con padding inferior para no chocar con el footer) === */
+/* Contenido: deja respiración abajo para el footer en móviles */
 .content-wrap{
   flex:1 1 auto;
   max-width:1120px;
@@ -31,23 +15,21 @@
   padding:16px 16px 8rem; /* bottom grande por defecto */
 }
 
-/* === Footer === */
+/* Footer responsive */
 .site-footer{ margin-top:auto; width:100%; }
 .footer-picture{ display:block; width:100%; }
 .footer-img{
   display:block;
   width:100%;
-  height:auto;      /* que sea natural */
-  max-height:240px; /* límite para desktop */
-  object-fit:cover; /* por si cambias a altura fija más adelante */
+  height:auto;
+  max-height:240px; /* límite desktop */
+  object-fit:cover;
 }
-
-/* —— Ajustes por tamaños —— */
 
 /* móvil */
 @media (max-width: 640px){
-  .content-wrap{ padding-bottom:6rem; } /* espacio para el botón */
-  .footer-img{ max-height:130px; }      /* footer más bajito en móvil */
+  .content-wrap{ padding-bottom:6rem; } /* evita tapar botón */
+  .footer-img{ max-height:130px; }      /* footer más bajito */
 }
 
 /* tablet */
@@ -59,57 +41,4 @@
 @media (min-width:1025px){
   .footer-img{ max-height:240px; }
 }
-/* ====== HEADER FIABLE EN MÓVIL ====== */
-:root {
-  /* alto base del header (ajústalo si quieres) */
-  --topbar-h: 56px;
-}
-
-/* Elimina márgenes por defecto que “empujan” fuera del header */
-h1, h2, h3, h4, h5, h6, p { margin: 0; }
-
-.topbar {
-  position: sticky;              /* se pega arriba al hacer scroll */
-  top: 0;
-  z-index: 1000;                 /* siempre delante del contenido */
-  background: #082349;           /* azul corporativo */
-  color: #fff;
-  /* respeta notch / barra de estado en iOS/Android */
-  padding-top: env(safe-area-inset-top, 0px);
-  /* fuerza una altura mínima fiable */
-  min-height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
-  box-shadow: 0 1px 0 rgba(255,255,255,0.05);
-}
-
-.topbar__inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;            /* padding lateral cómodo en móvil */
-  min-height: var(--topbar-h);
-}
-
-.logo {
-  height: 36px;
-  width: auto;
-  object-fit: contain;
-}
-
-.title {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;                /* evita que crezca de más */
-}
-
-/* Si usas Tailwind también, esto fuerza que el <main> nunca se “suba”
-   debajo del header en dispositivos raros */
-.content-wrap {
-  padding-top: 8px;              /* pequeño respiro bajo el header */
-}
-
-/* iOS Safari: a veces quita el sticky al usar overscroll.
-   Este hack reduce ese efecto. */
-html, body { overscroll-behavior-y: none; }
 
