@@ -1,44 +1,88 @@
-/* === Base del layout === */
+/* ===== Reset seguro ===== */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+h1, h2, h3, h4, h5, h6, p { margin: 0; }
+
+/* ===== Shell general ===== */
 .page-shell{
   display:flex;
   flex-direction:column;
   min-height:100vh;
-  background:#f9fafb;
+  background:#fff; /* deja blanco para tu landing */
   -webkit-font-smoothing:antialiased;
 }
 
-/* Contenido: deja respiración abajo para el footer en móviles */
+:root{
+  --topbar-h: 56px; /* alto de header */
+}
+
+/* ===== Header mínimo (solo logo) ===== */
+.topbar{
+  position: sticky;           /* permanece arriba sin sacar del flujo */
+  top: 0;
+  z-index: 1000;
+  background:#082349;         /* azul corporativo */
+  color:#fff;
+  padding-top: env(safe-area-inset-top, 0px);
+  min-height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.topbar__inner{
+  max-width:1120px;
+  margin:0 auto;
+  display:flex;
+  align-items:center;
+  padding:10px 16px;
+  min-height: var(--topbar-h);
+}
+
+.logo{
+  height:36px;
+  width:auto;
+  object-fit:contain;
+}
+
+/* ===== Contenido ===== */
 .content-wrap{
   flex:1 1 auto;
   max-width:1120px;
   margin:0 auto;
-  padding:16px 16px 8rem; /* bottom grande por defecto */
+  padding:24px 16px 7rem;   /* bottom generoso para no chocar con el footer */
 }
 
-/* Footer responsive */
+/* Puedes darle estilo a tu h1 del hero */
+.content-wrap h1{
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+/* ===== Footer responsive ===== */
 .site-footer{ margin-top:auto; width:100%; }
 .footer-picture{ display:block; width:100%; }
 .footer-img{
   display:block;
   width:100%;
   height:auto;
-  max-height:240px; /* límite desktop */
   object-fit:cover;
+  max-height:240px;           /* límite en desktop */
 }
 
-/* móvil */
+/* Móvil */
 @media (max-width: 640px){
-  .content-wrap{ padding-bottom:6rem; } /* evita tapar botón */
-  .footer-img{ max-height:130px; }      /* footer más bajito */
+  .content-wrap{ padding-bottom:6rem; } /* evita tapar CTA en móvil */
+  .footer-img{ max-height:140px; }
 }
 
-/* tablet */
+/* Tablet */
 @media (min-width:641px) and (max-width:1024px){
   .footer-img{ max-height:190px; }
 }
 
-/* desktop grande */
+/* Desktop grande */
 @media (min-width:1025px){
   .footer-img{ max-height:240px; }
 }
+
 
