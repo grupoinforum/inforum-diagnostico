@@ -1,14 +1,13 @@
-
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Opcional: ajustes base */
 :root {
-  color-scheme: light;
+  --radius: 12px;
 }
 
-body {
-  @apply bg-white text-slate-900;
+html, body {
+  height: 100%;
 }
-
-a { @apply underline text-blue-600; }
