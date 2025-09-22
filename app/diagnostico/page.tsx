@@ -1,7 +1,8 @@
+// app/diagnostico/page.tsx
 import { Suspense } from "react";
 import DiagnosticoContent from "./diagnostico-content";
 
-// ✅ Este config SÓLO funciona si el archivo es Server Component (sin "use client")
+// Forzar siempre render dinámico
 export const dynamic = "force-dynamic";
 
 export default function Page() {
