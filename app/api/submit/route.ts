@@ -17,18 +17,15 @@ type Payload = {
 /* ========= SMTP ========= */
 const BREVO_USER = process.env.BREVO_SMTP_USER!;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS!;
-const EMAIL_FROM =
-  process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
+const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 
 /* ========= SITIO & VIDEO ========= */
 const SITE_URL = "https://grupoinforum.com";
 const VIDEO_ID = "Eau96xNp3Ds";
 const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
 
-// Dominio de tu app para construir URLs absolutas
-const APP_BASE_URL =
-  process.env.APP_BASE_URL || "https://TU-DOMINIO.com";
-const VIDEO_IMAGE = `${APP_BASE_URL}/video.png`;
+/* ========= MINIATURA ABSOLUTA (en /public/video.png) ========= */
+const VIDEO_IMAGE = "https://inforum-diagnostico.vercel.app/video.png";
 
 /* ========= EMAIL BODIES ========= */
 function emailBodies(data: Payload) {
@@ -81,10 +78,7 @@ export async function POST(req: Request) {
   try {
     const data = (await req.json()) as Payload;
     if (!data?.name || !data?.email) {
-      return NextResponse.json(
-        { ok: false, error: "Faltan nombre o email" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
     const transporter = nodemailer.createTransport({
@@ -106,9 +100,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, message: "Correo enviado" });
   } catch (err: any) {
     console.error("Error en /api/submit:", err?.message || err);
-    return NextResponse.json(
-      { ok: false, error: err?.message || "Error interno" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: err?.message || "Error interno" }, { status: 500 });
   }
 }
