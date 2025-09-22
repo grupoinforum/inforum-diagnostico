@@ -117,14 +117,8 @@ function isCorporateEmail(email: string) {
   return !FREE_EMAIL_DOMAINS.includes(domain);
 }
 
-// 🔹 Helper para limpiar líneas duplicadas "Visítanos:"
-function stripVisitLine(text: string) {
-  return text.replace(/^\s*Visítanos:.*$/gmi, "").trim();
-}
-
-
 /* =========================
-   TEXTOS DE RESULTADO UI (SIN “Visítanos”)
+   TEXTOS DE RESULTADO UI (SIN “Visítanos” adentro)
    ========================= */
 const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.
 Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.
@@ -139,7 +133,7 @@ Te estaremos contactando al liberar espacio.`;
    ========================= */
 function evaluateScore1(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
-  const qualifies = score1Count <= 3; // ≤3 califica; ≥4 no hay cupo
+  const qualifies = score1Count <= 3;
   const resultText = qualifies ? "Sí califica" : "No hay cupo (exhaustivo)";
   const uiText = qualifies ? SUCCESS_TEXT : FULL_TEXT;
   return { score1Count, qualifies, resultText, uiText };
@@ -166,7 +160,7 @@ async function submitDiagnostico(payload: any) {
    ========================= */
 export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
-  const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
+  const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
   const [form, setForm] = useState<{
     name: string;
@@ -186,7 +180,7 @@ export default function DiagnosticoContent() {
   const [resultUI, setResultUI] = useState<null | {
     qualifies: boolean;
     title: string;
-    message: string; // texto simple
+    message: string;
   }>(null);
 
   const utms = useMemo(() => {
@@ -224,9 +218,6 @@ export default function DiagnosticoContent() {
     [form]
   );
 
-  /* =========================
-     SUBMIT FINAL
-     ========================= */
   const onSubmit = async () => {
     setErrorMsg(null);
     if (!form.consent) {
@@ -245,10 +236,7 @@ export default function DiagnosticoContent() {
         company: form.company,
         email: form.email,
         country: countryLabel,
-        answers: {
-          utms,
-          items: finalAnswers,
-        },
+        answers: { utms, items: finalAnswers },
         score1Count,
         qualifies,
         resultText,
@@ -257,7 +245,7 @@ export default function DiagnosticoContent() {
       setResultUI({
         qualifies,
         title: qualifies ? "Sí califica" : "No hay cupo (exhaustivo)",
-        message: uiText, // texto sin "Visítanos"
+        message: uiText,
       });
     } catch (e: any) {
       setErrorMsg(e?.message || "No se logró enviar. Intenta de nuevo.");
@@ -277,12 +265,12 @@ export default function DiagnosticoContent() {
         </div>
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
 
-        {/* mensaje (sin link adentro) */}
+        {/* Mensaje sin links internos */}
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">
           {resultUI.message}
         </p>
 
-        {/* ÚNICO link "Visítanos" */}
+        {/* Link único */}
         <a
           href="https://www.grupoinforum.com"
           target="_blank"
@@ -308,7 +296,6 @@ export default function DiagnosticoContent() {
 
   return (
     <main className="max-w-3xl mx-auto p-6">
-      {/* Barra de progreso */}
       <div className="w-full h-2 bg-gray-200 rounded mb-6">
         <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: `${progressPct}%` }} />
       </div>
@@ -317,7 +304,7 @@ export default function DiagnosticoContent() {
       <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
       {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
 
-      {/* Paso 1: Preguntas */}
+      {/* Paso 1 */}
       {step === 1 && (
         <section className="space-y-6">
           {QUESTIONS.map((q) => (
@@ -362,7 +349,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 2: Datos de contacto */}
+      {/* Paso 2 */}
       {step === 2 && (
         <section className="space-y-4">
           <div>
@@ -399,7 +386,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 3: Consentimiento y envío */}
+      {/* Paso 3 */}
       {step === 3 && (
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
