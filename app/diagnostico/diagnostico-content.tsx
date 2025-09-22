@@ -118,15 +118,13 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   TEXTOS DE RESULTADO UI (SIN “Visítanos” adentro)
+   TEXTOS DE RESULTADO (sin links)
    ========================= */
 const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.
-Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.
-Acabamos de enviarte un correo con esta información.`;
+Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.`;
 
 const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno.
-Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros.
-Te estaremos contactando al liberar espacio.`;
+Te estaremos contactando al liberar espacio. Por lo pronto te invitamos a conocer más de nosotros.`;
 
 /* =========================
    EVALUACIÓN
@@ -149,9 +147,7 @@ async function submitDiagnostico(payload: any) {
     body: JSON.stringify(payload),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(json?.error || `Error ${res.status}`);
-  }
+  if (!res.ok) throw new Error(json?.error || `Error ${res.status}`);
   return json;
 }
 
@@ -265,19 +261,18 @@ export default function DiagnosticoContent() {
         </div>
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
 
-        {/* Mensaje sin links internos */}
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">
           {resultUI.message}
         </p>
 
-        {/* Link único */}
+        {/* ÚNICO link */}
         <a
-          href="https://www.grupoinforum.com"
+          href="https://grupoinforum.com/"
           target="_blank"
           rel="noopener noreferrer"
           className="block mt-4 underline"
         >
-          Visítanos: www.grupoinforum.com
+          Visítanos: grupoinforum.com
         </a>
 
         {resultUI.qualifies && (
