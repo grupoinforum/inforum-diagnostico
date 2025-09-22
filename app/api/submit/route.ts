@@ -4,41 +4,24 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 
-type Answer = {
-  id: string;
-  value: string;
-  score: 1 | 2;
-  extraText?: string;
-};
-
 type Payload = {
   name: string;
   company?: string;
   email: string;
-  country?: string; // puede venir como código (GT) o etiqueta ("Guatemala")
-  answers?: {
-    utms?: Record<string, string>;
-    items?: Answer[];
-  };
-  // opcionalmente podrían venir:
-  score1Count?: number;
+  country?: string;
+  answers?: any;
   qualifies?: boolean;
-  resultText?: string;
 };
 
-/* =========================
-   ENV & CONSTANTES
-   ========================= */
 const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
 const PD_API = process.env.PIPEDRIVE_API_KEY!;
 
-const BREVO_USER = process.env.BREVO_SMTP_USER || "";
-const BREVO_PASS = process.env.BREVO_SMTP_PASS || "";
+const BREVO_USER = process.env.BREVO_SMTP_USER;
+const BREVO_PASS = process.env.BREVO_SMTP_PASS;
 const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
+const SITE_URL = "https://grupoinforum.com";
 
-const SITE_URL = "https://www.grupoinforum.com"; // único link "Visítanos"
-
-/** Pipelines por país (IDs configurados en Vercel) */
+// Pipelines por país
 const PIPELINES = {
   GT: Number(process.env.PD_PIPELINE_GT ?? 1),
   SV: Number(process.env.PD_PIPELINE_SV ?? 2),
@@ -48,7 +31,7 @@ const PIPELINES = {
   PA: Number(process.env.PD_PIPELINE_PA ?? 6),
 } as const;
 
-/** Etapa “Capa 1” por país (IDs configurados en Vercel) */
+// Etapa Capa1
 const STAGE_CAPA1 = {
   GT: Number(process.env.PD_STAGE_GT_CAPA1 ?? 6),
   SV: Number(process.env.PD_STAGE_SV_CAPA1 ?? 7),
@@ -58,76 +41,93 @@ const STAGE_CAPA1 = {
   PA: Number(process.env.PD_STAGE_PA_CAPA1 ?? 31),
 } as const;
 
-/* =========================
-   HELPERS
-   ========================= */
-/** Normaliza etiqueta país -> código ISO usado en mapas de pipeline/stage */
+// ===============================
+// EMAIL BODIES (con video YouTube)
+// ===============================
+const VIDEO_ID   = "Eau96xNp3Ds";
+const VIDEO_URL  = `https://youtu.be/${VIDEO_ID}`;
+const VIDEO_THUMB = `https://img.youtube.com/vi/${VIDEO_ID}/hqdefault.jpg`;
+
+function emailBodies(data: Payload) {
+  const qualifies = !!data.qualifies;
+
+  const subject = qualifies
+    ? "Tu diagnóstico califica – Grupo Inforum"
+    : "Gracias por tu diagnóstico – Grupo Inforum";
+
+  const lead = qualifies
+    ? "¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos para presentarnos y realizar unas últimas dudas para guiarte de mejor manera."
+    : "¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Te estaremos contactando al liberar espacio. Por lo pronto te invitamos a conocer más de nosotros.";
+
+  // Texto plano
+  const text =
+`${lead}
+
+Mira el video: ${VIDEO_URL}
+
+Visítanos: ${SITE_URL}
+`;
+
+  // HTML
+  const html =
+`<div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111111">
+  <p style="margin:0 0 14px">${lead}</p>
+
+  <a href="${VIDEO_URL}" target="_blank" rel="noopener" style="text-decoration:none;border:0;display:inline-block;margin:6px 0 10px">
+    <img src="${VIDEO_THUMB}" width="560" style="max-width:100%;height:auto;border:0;display:block;border-radius:12px" alt="Ver video en YouTube" />
+  </a>
+
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:6px 0 16px">
+    <tr>
+      <td bgcolor="#2563EB" style="border-radius:10px">
+        <a href="${VIDEO_URL}" target="_blank" rel="noopener"
+           style="font-size:16px;line-height:16px;font-weight:600;color:#ffffff;text-decoration:none;padding:12px 18px;display:inline-block">
+          ▶︎ Ver video
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:16px 0 0">
+    Visítanos:
+    <a href="${SITE_URL}" target="_blank" rel="noopener" style="color:#2563EB">
+      ${SITE_URL.replace(/^https?:\\/\\//, "")}
+    </a>
+  </p>
+</div>`;
+
+  return { subject, text, html };
+}
+
+// ===============================
+// Helpers Pipedrive + Email
+// ===============================
 function countryToCode(label?: string): keyof typeof PIPELINES {
   if (!label) return "GT";
   const x = label.trim().toUpperCase();
   if (["GT", "SV", "HN", "DO", "EC", "PA"].includes(x)) return x as any;
 
   const MAP: Record<string, keyof typeof PIPELINES> = {
-    GUATEMALA: "GT",
+    "GUATEMALA": "GT",
     "EL SALVADOR": "SV",
-    HONDURAS: "HN",
+    "HONDURAS": "HN",
+    "PANAMÁ": "PA",
+    "PANAMA": "PA",
     "REPÚBLICA DOMINICANA": "DO",
     "REPUBLICA DOMINICANA": "DO",
-    ECUADOR: "EC",
-    "PANAMÁ": "PA",
-    PANAMA: "PA",
+    "ECUADOR": "EC",
   };
   return MAP[x] ?? "GT";
 }
 
-/** Fetch a la API de Pipedrive con api_token adjunto */
 async function pd(path: string, init?: RequestInit) {
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
   const text = await res.text();
   if (!res.ok) throw new Error(`Pipedrive ${path} → ${res.status} ${text}`);
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text as any;
-  }
+  try { return JSON.parse(text); } catch { return text as any; }
 }
 
-/** Componer texto seguro para correo (sin duplicar "Visítanos") */
-function emailBodies(data: Payload) {
-  const { qualifies } = data;
-
-  const title = qualifies ? "¡Tu diagnóstico califica!" : "Gracias por completar tu diagnóstico";
-  const lead = qualifies
-    ? `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.`
-    : `Gracias por llenar el cuestionario. Por el momento nuestro equipo se encuentra con cupo lleno.`;
-
-  const bodyLines = qualifies
-    ? [
-        `Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos y realizar unas últimas preguntas para guiarte de mejor manera.`,
-        `Acabamos de enviarte esta confirmación a tu correo.`,
-      ]
-    : [
-        `Acabamos de enviarte este correo para compartirte más información sobre nosotros.`,
-        `Te estaremos contactando cuando liberemos espacio.`,
-      ];
-
-  const text =
-    `${title}\n\n` +
-    `${lead}\n\n` +
-    bodyLines.join("\n") +
-    `\n\nVisítanos: ${SITE_URL}\n`;
-
-  const html =
-    `<h2 style="margin:0 0 12px;font-family:Arial,sans-serif;">${title}</h2>` +
-    `<p style="margin:0 0 8px;font-family:Arial,sans-serif;">${lead}</p>` +
-    bodyLines.map(p => `<p style="margin:0 0 8px;font-family:Arial,sans-serif;">${p}</p>`).join("") +
-    `<p style="margin:16px 0 0;font-family:Arial,sans-serif;">Visítanos: <a href="${SITE_URL}" target="_blank" rel="noopener noreferrer">${SITE_URL.replace(/^https?:\/\//, "")}</a></p>`;
-
-  return { text, html, subject: "Confirmación de recepción - Grupo Inforum" };
-}
-
-/** Enviar correo con Brevo SMTP (nodemailer) */
 async function sendConfirmation(data: Payload) {
   if (!BREVO_USER || !BREVO_PASS) {
     console.warn("Brevo SMTP no configurado. No se envía correo.");
@@ -140,7 +140,7 @@ async function sendConfirmation(data: Payload) {
     auth: { user: BREVO_USER, pass: BREVO_PASS },
   });
 
-  const { text, html, subject } = emailBodies(data);
+  const { subject, text, html } = emailBodies(data);
 
   await transporter.sendMail({
     from: EMAIL_FROM,
@@ -152,55 +152,21 @@ async function sendConfirmation(data: Payload) {
   console.log(`✅ Correo enviado a: ${data.email}`);
 }
 
-/** Armado de contenido para la Nota en Deal */
-function buildNoteContent(data: Payload, dealId: number | undefined) {
-  const utmStr = data.answers?.utms
-    ? Object.entries(data.answers.utms)
-        .map(([k, v]) => `    - ${k}: ${v}`)
-        .join("\n")
-    : null;
-
-  const answersStr = data.answers?.items?.length
-    ? data.answers.items
-        .map(
-          (a) =>
-            `    - ${a.id} → value: ${a.value} | score: ${a.score}${a.extraText ? ` | extra: ${a.extraText}` : ""}`
-        )
-        .join("\n")
-    : null;
-
-  return (
-    `Formulario diagnóstico\n` +
-    `• Nombre: ${data.name}\n` +
-    (data.company ? `• Empresa: ${data.company}\n` : "") +
-    `• Email: ${data.email}\n` +
-    (data.country ? `• País: ${data.country}\n` : "") +
-    (typeof data.score1Count === "number" ? `• #score(1): ${data.score1Count}\n` : "") +
-    (typeof data.qualifies === "boolean" ? `• Resultado: ${data.qualifies ? "Sí califica" : "No hay cupo (exhaustivo)"}\n` : "") +
-    (utmStr ? `\nUTMs:\n${utmStr}\n` : "") +
-    (answersStr ? `\nRespuestas:\n${answersStr}\n` : "") +
-    (dealId ? `\nDeal ID: ${dealId}\n` : "")
-  );
-}
-
-/* =========================
-   HANDLER
-   ========================= */
+// ===============================
+// API Route
+// ===============================
 export async function POST(req: Request) {
   try {
     const data = (await req.json()) as Payload;
-
-    // Validación mínima
     if (!data?.name || !data?.email) {
       return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    // País => pipeline/stage
     const cc = countryToCode(data.country);
     const pipeline_id = PIPELINES[cc];
     const stage_id = STAGE_CAPA1[cc];
 
-    // 1) PERSON: buscar por email o crear
+    // Persona
     let personId: number | null = null;
     try {
       const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
@@ -221,16 +187,14 @@ export async function POST(req: Request) {
       personId = (created as any)?.data?.id;
     }
 
-    // 2) ORGANIZATION (opcional)
+    // Organización
     let orgId: number | undefined;
     if (data.company) {
       try {
         const s = await pd(`/organizations/search?term=${encodeURIComponent(data.company)}&exact_match=true`);
         const it = (s as any)?.data?.items?.[0];
         orgId = it?.item?.id;
-      } catch (e) {
-        console.error("[organizations/search]", (e as Error).message);
-      }
+      } catch {}
       if (!orgId) {
         try {
           const o = await pd(`/organizations`, {
@@ -245,7 +209,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) DEAL → Capa 1 del pipeline correcto
+    // Deal
     console.log(`[Deals] Creando deal → cc=${cc} pipeline=${pipeline_id} stage=${stage_id}`);
     const deal = await pd(`/deals`, {
       method: "POST",
@@ -255,17 +219,23 @@ export async function POST(req: Request) {
         person_id: personId!,
         org_id: orgId,
         pipeline_id,
-        stage_id,        // Capa 1
+        stage_id,
         value: 0,
-        currency: "GTQ", // si quieres, cambia por país
+        currency: "GTQ",
       }),
     });
     const dealId = (deal as any)?.data?.id;
-    console.log(`🟢 Deal creado #${dealId} en pipeline ${pipeline_id}, stage ${stage_id}`);
+    console.log(`🟢 Deal creado #${dealId}`);
 
-    // 4) NOTE con contexto (UTMs + respuestas)
+    // Nota
     try {
-      const content = buildNoteContent(data, dealId);
+      const content =
+        `Formulario diagnóstico\n` +
+        `• Nombre: ${data.name}\n` +
+        (data.company ? `• Empresa: ${data.company}\n` : "") +
+        `• Email: ${data.email}\n` +
+        (data.country ? `• País: ${data.country}\n` : "") +
+        (data.answers ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}` : "");
       await pd(`/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -275,14 +245,10 @@ export async function POST(req: Request) {
       console.error("[notes POST]", (e as Error).message);
     }
 
-    // 5) EMAIL de confirmación (no bloqueante)
-    try {
-      await sendConfirmation(data);
-    } catch (e) {
-      console.error("[email]", (e as Error).message);
-    }
+    // Confirmación por correo
+    try { await sendConfirmation(data); } catch (e) { console.error("[email]", (e as Error).message); }
 
-    return NextResponse.json({ ok: true, message: "Deal creado en Capa 1 y correo enviado" });
+    return NextResponse.json({ ok: true, message: "Deal creado y correo enviado" });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
     return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
