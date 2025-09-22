@@ -234,14 +234,14 @@ export default function DiagnosticoContent() {
         {/* Mensaje (sin links) */}
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
-        {/* ÚNICO link Visítanos (fuera del mensaje) */}
+        {/* ÚNICO CTA */}
         <a
           href="https://www.grupoinforum.com"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block mt-4 px-5 py-3 rounded-2xl bg-[#082a49] text-white"
         >
-          Visítanos
+          Visita nuestro website
         </a>
 
         {resultUI.qualifies && (
