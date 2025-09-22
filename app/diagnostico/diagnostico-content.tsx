@@ -78,8 +78,8 @@ const QUESTIONS = [
     required: true,
   },
   {
-    id: "pro_tecnologia",
-    label: "¿La empresa es pro-tecnología?",
+    id: "proyecto_activo",
+    label: "¿Tienen proyecto activo en los próximos 3–6 meses?",
     type: "single" as const,
     options: [
       { value: "si", label: "Sí", score: 2 },
@@ -262,10 +262,7 @@ export default function DiagnosticoContent() {
     <main className="max-w-3xl mx-auto p-6">
       {/* Barra de progreso */}
       <div className="w-full h-2 bg-gray-200 rounded mb-6">
-        <div
-          className="h-2 bg-blue-500 rounded transition-all"
-          style={{ width: `${progressPct}%` }}
-        />
+        <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: `${progressPct}%` }} />
       </div>
 
       <h1 className="text-2xl font-semibold mb-4">Diagnóstico para Radiografía de Software de Gestión Empresarial</h1>
