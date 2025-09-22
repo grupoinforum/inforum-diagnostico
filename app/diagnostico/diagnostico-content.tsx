@@ -167,11 +167,17 @@ export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
-  the const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    company: string;
+    email: string;
+    country: CountryValue;
+    consent: boolean;
+  }>({
     name: "",
     company: "",
     email: "",
-    country: "GT" as CountryValue,
+    country: "GT",
     consent: false,
   });
   const [loading, setLoading] = useState(false);
@@ -406,7 +412,7 @@ export default function DiagnosticoContent() {
                   </a>
                 ) : (
                   <span className="font-medium">Política de Privacidad</span>
-                )}.
+                )}
               </span>
             </label>
           </div>
