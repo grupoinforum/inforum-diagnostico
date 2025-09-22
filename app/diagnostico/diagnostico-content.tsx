@@ -170,6 +170,7 @@ export default function DiagnosticoContent() {
   }, [searchParams]);
 
   const progressPct = useMemo(() => (step / 3) * 100, [step]);
+  const barWidth = progressPct + "%"; // 🔹 Arreglo para evitar error de backticks
 
   const handleSelect = (qid: string, optionValue: string) => {
     const q = QUESTIONS.find(q => q.id === qid)!;
@@ -232,7 +233,6 @@ export default function DiagnosticoContent() {
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
-        {/* ÚNICO CTA */}
         <a
           href="https://www.grupoinforum.com"
           target="_blank"
@@ -260,8 +260,115 @@ export default function DiagnosticoContent() {
     <main className="max-w-3xl mx-auto p-6">
       {/* Barra de progreso */}
       <div className="w-full h-2 bg-gray-200 rounded mb-6">
-        <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: `${progressPct}%` }} />
+        <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: barWidth }} />
       </div>
 
       <h1 className="text-2xl font-semibold mb-4">Diagnóstico para Radiografía de Software de Gestión Empresarial</h1>
-      <p classNam
+      <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
+      {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
+
+      {/* Paso 1: Preguntas */}
+      {step === 1 && (
+        <section className="space-y-6">
+          {QUESTIONS.map((q) => (
+            <div key={q.id} className="p-4 rounded-2xl border border-gray-200">
+              <label className="font-medium block mb-3">{q.label}</label>
+              <div className="space-y-2">
+                {q.options.map((o) => (
+                  <div key={o.value} className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id={`${q.id}_${o.value}`}
+                      name={q.id}
+                      className="cursor-pointer"
+                      onChange={() => handleSelect(q.id, o.value)}
+                      checked={answers[q.id]?.value === o.value}
+                    />
+                    <label htmlFor={`${q.id}_${o.value}`} className="cursor-pointer">{o.label}</label>
+                  </div>
+                ))}
+              </div>
+              {q.options.some(o => (o as any).requiresText) && answers[q.id]?.value?.includes("otro") && (
+                <input
+                  type="text"
+                  placeholder="Especifica aquí"
+                  className="mt-3 w-full border rounded-xl px-3 py-2"
+                  onChange={(e) => handleExtraText(q.id, e.target.value)}
+                />
+              )}
+            </div>
+          ))}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setStep(2)}
+              disabled={!canContinueQuestions}
+              className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Paso 2: Datos */}
+      {step === 2 && (
+        <section className="space-y-4">
+          <div>
+            <label className="block mb-1">Nombre</label>
+            <input className="w-full border rounded-xl px-3 py-2" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="block mb-1">Empresa</label>
+            <input className="w-full border rounded-xl px-3 py-2" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} />
+          </div>
+          <div>
+            <label className="block mb-1">Correo empresarial</label>
+            <input className="w-full border rounded-xl px-3 py-2" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            {form.email && !isCorporateEmail(form.email) && (
+              <p className="text-sm text-red-600 mt-1">Usa un correo corporativo (no gmail/hotmail/outlook/yahoo, etc.).</p>
+            )}
+          </div>
+          <div>
+            <label className="block mb-1">País</label>
+            <select className="w-full border rounded-xl px-3 py-2" value={form.country} onChange={e => setForm({ ...form, country: e.target.value as CountryValue })}>
+              {COUNTRIES.map(c => (<option key={c.value} value={c.value}>{c.label}</option>))}
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <button onClick={() => setStep(1)} className="px-5 py-3 rounded-2xl border">Atrás</button>
+            <button
+              onClick={() => setStep(3)}
+              disabled={!canContinueData}
+              className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Paso 3: Consentimiento */}
+      {step === 3 && (
+        <section className="space-y-4">
+          <div className="p-4 rounded-2xl border border-gray-200">
+            <label className="flex items-start gap-3">
+              <input type="checkbox" checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} />
+              <span>
+                Autorizo a Grupo Inforum a contactarme respecto a esta evaluación y servicios relacionados. He leído la{" "}
+                {process.env.NEXT_PUBLIC_PRIVACY_URL ? (
+                  <a href={process.env.NEXT_PUBLIC_PRIVACY_URL} className="text-blue-600 underline" target="_blank" rel="noreferrer">Política de Privacidad</a>
+                ) : (<span className="font-medium">Política de Privacidad</span>)}
+              </span>
+            </label>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <button onClick={() => setStep(2)} className="px-5 py-3 rounded-2xl border">Atrás</button>
+            <button onClick={onSubmit} disabled={loading || !form.consent} className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50">
+              {loading ? "Enviando..." : "Haz clic para conocer tu resultado"}
+            </button>
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
