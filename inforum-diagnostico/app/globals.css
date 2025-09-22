@@ -244,4 +244,30 @@ h1, h2, h3, h4, h5, h6, p { margin: 0; }
   font-size: 15px;
 }
 
+/* Tarjeta para cada pregunta */
+.quiz .question-block {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: box-shadow .2s ease;
+}
+
+.quiz .question-block:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.quiz .question-block .question {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.quiz .question-block label {
+  display: block;
+  margin: 6px 0;
+  cursor: pointer;
+  font-size: 15px;
+}
 
