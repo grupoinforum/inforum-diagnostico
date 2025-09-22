@@ -124,7 +124,7 @@ Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más inf
 Te estaremos contactando al liberar espacio.`;
 
 /* =========================
-   EVALUACIÓN
+   EVALUACIÓN (≤3 score=1 ⇒ califica)
    ========================= */
 function evaluateScore1(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
@@ -170,7 +170,7 @@ export default function DiagnosticoContent() {
   }, [searchParams]);
 
   const progressPct = useMemo(() => (step / 3) * 100, [step]);
-  const barWidth = progressPct + "%"; // 🔹 Arreglo para evitar error de backticks
+  const barWidth = progressPct + "%";
 
   const handleSelect = (qid: string, optionValue: string) => {
     const q = QUESTIONS.find(q => q.id === qid)!;
@@ -199,13 +199,15 @@ export default function DiagnosticoContent() {
     try {
       const finalAnswers = Object.values(answers).filter(Boolean) as Answer[];
       const { score1Count, qualifies, resultText, uiText } = evaluateScore1(finalAnswers);
+      const countryCode  = form.country;
       const countryLabel = COUNTRIES.find(c => c.value === form.country)?.label || form.country;
 
       await submitDiagnostico({
         name: form.name,
         company: form.company,
         email: form.email,
-        country: countryLabel,
+        countryCode,           // código para pipeline
+        country: countryLabel, // label para mostrar
         answers: { utms, items: finalAnswers },
         score1Count,
         qualifies,
@@ -214,7 +216,7 @@ export default function DiagnosticoContent() {
 
       setResultUI({
         qualifies,
-        title: resultText,
+        title: qualifies ? "Sí califica" : "No hay cupo (exhaustivo)",
         message: uiText,
       });
     } catch (e: any) {
@@ -231,6 +233,7 @@ export default function DiagnosticoContent() {
           <div className="h-2 bg-blue-500 rounded" style={{ width: "100%" }} />
         </div>
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
+
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
         <a
@@ -267,7 +270,7 @@ export default function DiagnosticoContent() {
       <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
       {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
 
-      {/* Paso 1: Preguntas */}
+      {/* Paso 1 */}
       {step === 1 && (
         <section className="space-y-6">
           {QUESTIONS.map((q) => (
@@ -310,7 +313,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 2: Datos */}
+      {/* Paso 2 */}
       {step === 2 && (
         <section className="space-y-4">
           <div>
@@ -347,7 +350,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 3: Consentimiento */}
+      {/* Paso 3 */}
       {step === 3 && (
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
