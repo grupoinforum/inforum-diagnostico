@@ -205,11 +205,7 @@ export default function DiagnosticoContent() {
         resultText,
       });
 
-      setResultUI({
-        qualifies,
-        title: resultText,
-        message: uiText,
-      });
+      setResultUI({ qualifies, title: resultText, message: uiText });
     } catch (e: any) {
       setErrorMsg(e?.message || "No se logró enviar. Intenta de nuevo.");
     } finally {
@@ -230,10 +226,20 @@ export default function DiagnosticoContent() {
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
+        {/* CTA fijo */}
+        <a
+          href="https://www.grupoinforum.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block mt-4 px-5 py-3 rounded-2xl bg-[#082a49] text-white"
+        >
+          Visita nuestro website
+        </a>
+
         {resultUI.qualifies && (
           <a
             href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico"
-            className="inline-block mt-4 px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
+            className="inline-block mt-3 px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -258,7 +264,7 @@ export default function DiagnosticoContent() {
       <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
       {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
 
-      {/* Paso 1: Preguntas */}
+      {/* Paso 1 */}
       {step === 1 && (
         <section className="space-y-6">
           {QUESTIONS.map((q) => (
@@ -301,7 +307,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 2: Datos */}
+      {/* Paso 2 */}
       {step === 2 && (
         <section className="space-y-4">
           <div>
@@ -338,7 +344,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 3: Consentimiento + Envío */}
+      {/* Paso 3 */}
       {step === 3 && (
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
