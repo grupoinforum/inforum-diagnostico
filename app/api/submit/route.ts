@@ -5,16 +5,20 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 
+/* ========= TYPES ========= */
 type Payload = {
   name: string;
   company?: string;
   email: string;
-  country?: string;
-  answers?: any;
+  country?: string;   // etiqueta país
+  answers?: any;      // respuestas del diagnóstico
   qualifies?: boolean;
+  resultText?: string;
 };
 
-/* ========= SMTP ========= */
+/* ========= ENV VARS ========= */
+const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
+const PD_API = process.env.PIPEDRIVE_API_KEY!;
 const BREVO_USER = process.env.BREVO_SMTP_USER!;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS!;
 const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
@@ -23,11 +27,37 @@ const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 const SITE_URL = "https://grupoinforum.com";
 const VIDEO_ID = "Eau96xNp3Ds";
 const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
-
-/* ========= MINIATURA ABSOLUTA (en /public/video.png) ========= */
 const VIDEO_IMAGE = "https://inforum-diagnostico.vercel.app/video.png";
 
-/* ========= EMAIL BODIES ========= */
+/* ========= FUNC: Crear lead en Pipedrive ========= */
+async function createPipedriveLead(data: Payload) {
+  const url = `https://${PD_DOMAIN}.pipedrive.com/v1/leads?api_token=${PD_API}`;
+
+  const body = {
+    title: `[Diagnóstico] ${data.name} – ${data.company || ""}`,
+    person_id: null,
+    organization_id: null,
+    visible_to: 3, // visible para todos
+    label_ids: [],
+
+    // custom fields / notas
+    note: `Email: ${data.email}\nEmpresa: ${data.company}\nPaís: ${data.country}\nResultado: ${data.resultText}\nQualifies: ${data.qualifies ? "Sí" : "No"}\n\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}`
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Pipedrive error: ${res.status} ${errText}`);
+  }
+  return res.json();
+}
+
+/* ========= FUNC: Email ========= */
 function emailBodies(data: Payload) {
   const qualifies = !!data.qualifies;
 
@@ -49,14 +79,12 @@ Website: ${SITE_URL}`.trim();
 <div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111">
   <p style="margin:0 0 14px">${lead}</p>
 
-  <!-- Imagen completa clickeable -->
   <a href="${VIDEO_URL}" target="_blank" rel="noopener"
      style="text-decoration:none;border:0;display:inline-block;margin:6px 0 18px">
     <img src="${VIDEO_IMAGE}" width="560" alt="Ver video"
          style="display:block;max-width:100%;height:auto;border:0;border-radius:12px" />
   </a>
 
-  <!-- CTA único -->
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0">
     <tr>
       <td bgcolor="#082a49" style="border-radius:10px">
@@ -81,6 +109,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
+    // 1) Enviar a Pipedrive
+    await createPipedriveLead(data);
+
+    // 2) Enviar email
     const transporter = nodemailer.createTransport({
       host: "smtp-relay.brevo.com",
       port: 587,
@@ -97,9 +129,12 @@ export async function POST(req: Request) {
       html,
     });
 
-    return NextResponse.json({ ok: true, message: "Correo enviado" });
+    return NextResponse.json({ ok: true, message: "Lead enviado y correo enviado" });
   } catch (err: any) {
     console.error("Error en /api/submit:", err?.message || err);
-    return NextResponse.json({ ok: false, error: err?.message || "Error interno" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: err?.message || "Error interno" },
+      { status: 500 }
+    );
   }
 }
