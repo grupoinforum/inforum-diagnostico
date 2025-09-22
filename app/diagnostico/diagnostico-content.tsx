@@ -167,7 +167,7 @@ export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
-  const [form, setForm] = useState({
+  the const [form, setForm] = useState({
     name: "",
     company: "",
     email: "",
