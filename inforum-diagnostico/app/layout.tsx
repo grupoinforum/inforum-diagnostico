@@ -49,3 +49,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+export default function Page() {
+  return (
+    <div className="quiz">   {/* <-- añade solo este wrapper */}
+      {/* TODO: aquí va tu cuestionario tal como ya lo tienes */}
+    </div>
+  );
+}
