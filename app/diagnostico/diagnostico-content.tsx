@@ -155,9 +155,9 @@ export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
-  const [form, setForm] = useState<{ name: string; company: string; email: string; country: CountryValue; consent: boolean; }>(
-    { name: "", company: "", email: "", country: "GT", consent: false }
-  );
+  const [form, setForm] = useState<{
+    name: string; company: string; email: string; country: CountryValue; consent: boolean;
+  }>({ name: "", company: "", email: "", country: "GT", consent: false });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resultUI, setResultUI] = useState<null | { qualifies: boolean; title: string; message: string }>(null);
@@ -262,7 +262,10 @@ export default function DiagnosticoContent() {
     <main className="max-w-3xl mx-auto p-6">
       {/* Barra de progreso */}
       <div className="w-full h-2 bg-gray-200 rounded mb-6">
-        <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: \`\${progressPct}%\` }} />
+        <div
+          className="h-2 bg-blue-500 rounded transition-all"
+          style={{ width: `${progressPct}%` }}
+        />
       </div>
 
       <h1 className="text-2xl font-semibold mb-4">Diagnóstico para Radiografía de Software de Gestión Empresarial</h1>
@@ -280,13 +283,13 @@ export default function DiagnosticoContent() {
                   <div key={o.value} className="flex items-center gap-3">
                     <input
                       type="radio"
-                      id={\`\${q.id}_\${o.value}\`}
+                      id={`${q.id}_${o.value}`}
                       name={q.id}
                       className="cursor-pointer"
                       onChange={() => handleSelect(q.id, o.value)}
                       checked={answers[q.id]?.value === o.value}
                     />
-                    <label htmlFor={\`\${q.id}_\${o.value}\`} className="cursor-pointer">{o.label}</label>
+                    <label htmlFor={`${q.id}_${o.value}`} className="cursor-pointer">{o.label}</label>
                   </div>
                 ))}
               </div>
