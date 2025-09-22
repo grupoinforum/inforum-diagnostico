@@ -11,7 +11,7 @@ type Payload = {
   email: string;
   country?: string;
   answers?: any;
-  qualifies?: boolean; // viene del front
+  qualifies?: boolean; // viene del front (true = sí califica)
 };
 
 /* ========= SMTP ========= */
@@ -21,8 +21,6 @@ const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 
 /* ========= SITIO & VIDEO ========= */
 const SITE_URL = "https://grupoinforum.com";
-const SITE_HOST = SITE_URL.replace(/^https?:\/\//, "");
-
 const VIDEO_ID = "Eau96xNp3Ds";
 const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
 const VIDEO_THUMB = `https://img.youtube.com/vi/${VIDEO_ID}/hqdefault.jpg`;
@@ -39,39 +37,42 @@ function emailBodies(data: Payload) {
     ? "¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos para presentarnos y realizar unas últimas dudas para guiarte de mejor manera."
     : "¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Te estaremos contactando al liberar espacio. Por lo pronto te invitamos a conocer más de nosotros.";
 
+  // Texto plano (fallback)
   const text =
 `${lead}
 
 Mira el video: ${VIDEO_URL}
 
-Visítanos: ${SITE_URL}
+Visita nuestro website: ${SITE_URL}
 `.trim();
 
-  // Miniatura clickeable (sin overlay CSS para máxima compatibilidad)
+  // HTML con miniatura + botón overlay "▶︎ Reproducir"
   const html = `
 <div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111">
   <p style="margin:0 0 14px">${lead}</p>
 
-  <a href="${VIDEO_URL}" target="_blank" rel="noopener" style="text-decoration:none;border:0;display:inline-block;margin:6px 0 18px">
-    <img src="${VIDEO_THUMB}" width="560" style="max-width:100%;height:auto;border:0;display:block;border-radius:12px" alt="Ver video en YouTube" />
-  </a>
+  <div style="margin:6px 0 18px">
+    <div style="position:relative;display:inline-block;border-radius:12px;overflow:hidden">
+      <a href="${VIDEO_URL}" target="_blank" rel="noopener" style="text-decoration:none;border:0;display:inline-block">
+        <img src="${VIDEO_THUMB}" width="560" style="max-width:100%;height:auto;border:0;display:block" alt="Ver video en YouTube" />
+      </a>
+      <a href="${VIDEO_URL}" target="_blank" rel="noopener"
+         style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000000cc;border-radius:999px;padding:12px 18px;color:#ffffff;font-weight:700;text-decoration:none;display:inline-block">
+        ▶︎ Reproducir
+      </a>
+    </div>
+  </div>
 
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 6px">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0">
     <tr>
       <td bgcolor="#082a49" style="border-radius:10px">
         <a href="${SITE_URL}" target="_blank" rel="noopener"
            style="font-size:16px;line-height:16px;font-weight:600;color:#ffffff;text-decoration:none;padding:12px 18px;display:inline-block">
-          Visítanos
+          Visita nuestro website
         </a>
       </td>
     </tr>
   </table>
-
-  <p style="margin:8px 0 0">
-    <a href="${SITE_URL}" target="_blank" rel="noopener" style="color:#2563EB;text-decoration:underline">
-      ${SITE_HOST}
-    </a>
-  </p>
 </div>
 `.trim();
 
