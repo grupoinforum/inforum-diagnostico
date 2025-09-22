@@ -89,12 +89,7 @@ const QUESTIONS = [
   },
 ] as const;
 
-type Answer = {
-  id: string;
-  value: string;
-  score: 1 | 2;
-  extraText?: string;
-};
+type Answer = { id: string; value: string; score: 1 | 2; extraText?: string };
 
 const COUNTRIES = [
   { value: "GT", label: "Guatemala" },
@@ -118,16 +113,18 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   TEXTOS DE RESULTADO (sin links)
+   TEXTOS DE RESULTADO (SIN links)
    ========================= */
 const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.
-Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.`;
+Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.
+Acabamos de enviarte un correo con esta información.`;
 
 const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno.
-Te estaremos contactando al liberar espacio. Por lo pronto te invitamos a conocer más de nosotros.`;
+Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros.
+Te estaremos contactando al liberar espacio.`;
 
 /* =========================
-   EVALUACIÓN
+   EVALUACIÓN (≤3 score=1 ⇒ califica)
    ========================= */
 function evaluateScore1(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
@@ -159,25 +156,11 @@ export default function DiagnosticoContent() {
   const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
   const [form, setForm] = useState<{
-    name: string;
-    company: string;
-    email: string;
-    country: CountryValue;
-    consent: boolean;
-  }>({
-    name: "",
-    company: "",
-    email: "",
-    country: "GT",
-    consent: false,
-  });
+    name: string; company: string; email: string; country: CountryValue; consent: boolean;
+  }>({ name: "", company: "", email: "", country: "GT", consent: false });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [resultUI, setResultUI] = useState<null | {
-    qualifies: boolean;
-    title: string;
-    message: string;
-  }>(null);
+  const [resultUI, setResultUI] = useState<null | { qualifies: boolean; title: string; message: string }>(null);
 
   const utms = useMemo(() => {
     const keys = ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"] as const;
@@ -200,26 +183,16 @@ export default function DiagnosticoContent() {
     setAnswers(prev => ({ ...prev, [qid]: { ...existing, extraText: text } }));
   };
 
-  const canContinueQuestions = useMemo(
-    () => QUESTIONS.every(q => !!answers[q.id]),
-    [answers]
-  );
+  const canContinueQuestions = useMemo(() => QUESTIONS.every(q => !!answers[q.id]), [answers]);
 
   const canContinueData = useMemo(
-    () =>
-      form.name.trim().length > 1 &&
-      form.company.trim().length > 1 &&
-      /.+@.+\..+/.test(form.email) &&
-      isCorporateEmail(form.email),
+    () => form.name.trim().length > 1 && form.company.trim().length > 1 && /.+@.+\..+/.test(form.email) && isCorporateEmail(form.email),
     [form]
   );
 
   const onSubmit = async () => {
     setErrorMsg(null);
-    if (!form.consent) {
-      setErrorMsg("Debes aceptar el consentimiento para continuar.");
-      return;
-    }
+    if (!form.consent) { setErrorMsg("Debes aceptar el consentimiento para continuar."); return; }
     setLoading(true);
 
     try {
@@ -241,7 +214,7 @@ export default function DiagnosticoContent() {
       setResultUI({
         qualifies,
         title: qualifies ? "Sí califica" : "No hay cupo (exhaustivo)",
-        message: uiText,
+        message: uiText, // sin links
       });
     } catch (e: any) {
       setErrorMsg(e?.message || "No se logró enviar. Intenta de nuevo.");
@@ -250,9 +223,6 @@ export default function DiagnosticoContent() {
     }
   };
 
-  /* =========================
-     RENDER
-     ========================= */
   if (resultUI) {
     return (
       <main className="max-w-3xl mx-auto p-6">
@@ -261,24 +231,23 @@ export default function DiagnosticoContent() {
         </div>
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
 
-        <p className="whitespace-pre-line text-gray-800 leading-relaxed">
-          {resultUI.message}
-        </p>
+        {/* Mensaje (sin links) */}
+        <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
-        {/* ÚNICO link */}
+        {/* ÚNICO link Visítanos (fuera del mensaje) */}
         <a
-          href="https://grupoinforum.com/"
+          href="https://www.grupoinforum.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="block mt-4 underline"
+          className="inline-block mt-4 px-5 py-3 rounded-2xl bg-[#082a49] text-white"
         >
-          Visítanos: grupoinforum.com
+          Visítanos
         </a>
 
         {resultUI.qualifies && (
           <a
             href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico"
-            className="inline-block mt-5 px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
+            className="inline-block mt-3 px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -291,6 +260,7 @@ export default function DiagnosticoContent() {
 
   return (
     <main className="max-w-3xl mx-auto p-6">
+      {/* Barra de progreso */}
       <div className="w-full h-2 bg-gray-200 rounded mb-6">
         <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: `${progressPct}%` }} />
       </div>
@@ -316,9 +286,7 @@ export default function DiagnosticoContent() {
                       onChange={() => handleSelect(q.id, o.value)}
                       checked={answers[q.id]?.value === o.value}
                     />
-                    <label htmlFor={`${q.id}_${o.value}`} className="cursor-pointer">
-                      {o.label}
-                    </label>
+                    <label htmlFor={`${q.id}_${o.value}`} className="cursor-pointer">{o.label}</label>
                   </div>
                 ))}
               </div>
@@ -386,35 +354,18 @@ export default function DiagnosticoContent() {
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
             <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={form.consent}
-                onChange={e => setForm({ ...form, consent: e.target.checked })}
-              />
+              <input type="checkbox" checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} />
               <span>
                 Autorizo a Grupo Inforum a contactarme respecto a esta evaluación y servicios relacionados. He leído la{" "}
                 {process.env.NEXT_PUBLIC_PRIVACY_URL ? (
-                  <a
-                    href={process.env.NEXT_PUBLIC_PRIVACY_URL}
-                    className="text-blue-600 underline"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Política de Privacidad
-                  </a>
-                ) : (
-                  <span className="font-medium">Política de Privacidad</span>
-                )}.
+                  <a href={process.env.NEXT_PUBLIC_PRIVACY_URL} className="text-blue-600 underline" target="_blank" rel="noreferrer">Política de Privacidad</a>
+                ) : (<span className="font-medium">Política de Privacidad</span>)}
               </span>
             </label>
           </div>
           <div className="flex items-center justify-between gap-3">
             <button onClick={() => setStep(2)} className="px-5 py-3 rounded-2xl border">Atrás</button>
-            <button
-              onClick={onSubmit}
-              disabled={loading || !form.consent}
-              className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50"
-            >
+            <button onClick={onSubmit} disabled={loading || !form.consent} className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50">
               {loading ? "Enviando..." : "Haz clic para conocer tu resultado"}
             </button>
           </div>
