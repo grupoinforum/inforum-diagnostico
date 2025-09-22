@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+// Forzar renderizado sólo en cliente (el wrapper ya está en page.tsx)
 export const dynamic = "force-dynamic";
 
-/* =========================
-   CONFIGURACIÓN DEL TEST (7)
-   ========================= */
+// ---- Configuración del cuestionario (tus 7 preguntas originales) ----
 const QUESTIONS = [
   {
     id: "industria",
@@ -17,7 +16,7 @@ const QUESTIONS = [
       { value: "produccion", label: "Producción", score: 2 },
       { value: "distribucion", label: "Distribución", score: 2 },
       { value: "retail", label: "Retail", score: 2 },
-      { value: "servicios", label: "Servicios", score: 2 },
+      { value: "servicios", label: "Servicios", score: 1 },
       { value: "otro", label: "Otro (especificar)", score: 1, requiresText: true },
     ],
     required: true,
@@ -30,7 +29,7 @@ const QUESTIONS = [
       { value: "sapb1", label: "SAP Business One", score: 2 },
       { value: "odoo", label: "Odoo", score: 2 },
       { value: "oracle", label: "Oracle", score: 2 },
-      { value: "msdynamics", label: "Microsoft Dynamics", score: 2 },
+      { value: "msdynamics", label: "Microsoft Dynamics", score: 1 },
       { value: "sistema_propio", label: "Sistema Propio", score: 2 },
       { value: "erp_otro", label: "Otro (especificar)", score: 2, requiresText: true },
     ],
@@ -78,7 +77,7 @@ const QUESTIONS = [
     required: true,
   },
   {
-    id: "pro_tecnologia",
+    id: "protecnologia",
     label: "¿La empresa es pro-tecnología?",
     type: "single" as const,
     options: [
@@ -89,7 +88,12 @@ const QUESTIONS = [
   },
 ] as const;
 
-type Answer = { id: string; value: string; score: 1 | 2; extraText?: string };
+type Answer = {
+  id: string;
+  value: string;
+  score: 1 | 2;
+  extraText?: string;
+};
 
 const COUNTRIES = [
   { value: "GT", label: "Guatemala" },
@@ -113,54 +117,41 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   TEXTOS DE RESULTADO
+   HELPER: Enviar a la API
    ========================= */
-const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.
-Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30 minutos para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.
-Acabamos de enviarte un correo con esta información.`;
-
-const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno.
-Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros.
-Te estaremos contactando al liberar espacio.`;
-
-/* =========================
-   EVALUACIÓN (≤3 score=1 ⇒ califica)
-   ========================= */
-function evaluateScore1(finalAnswers: Answer[]) {
-  const score1Count = finalAnswers.filter(a => a.score === 1).length;
-  const qualifies = score1Count <= 3;
-  const resultText = qualifies ? "Sí califica" : "No hay cupo (exhaustivo)";
-  const uiText = qualifies ? SUCCESS_TEXT : FULL_TEXT;
-  return { score1Count, qualifies, resultText, uiText };
-}
-
-/* =========================
-   API HELPER
-   ========================= */
-async function submitDiagnostico(payload: any) {
+async function submitDiagnostico(payload: {
+  name: string;
+  company?: string;
+  email: string;
+  country?: string; // ← el backend espera el LABEL (p.ej. "Honduras")
+  answers?: any;
+}) {
   const res = await fetch("/api/submit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error || `Error ${res.status}`);
-  return json;
+  const json = await res.json();
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || `Error ${res.status}`);
+  }
+  return json; // { ok: true }
 }
 
-/* =========================
-   COMPONENTE
-   ========================= */
 export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
-  const [form, setForm] = useState<{
-    name: string; company: string; email: string; country: CountryValue; consent: boolean;
-  }>({ name: "", company: "", email: "", country: "GT", consent: false });
+  const [form, setForm] = useState({
+    name: "",
+    company: "",
+    email: "",
+    country: "GT" as CountryValue, // value = código; enviaremos el LABEL al backend
+    consent: false,
+  });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [resultUI, setResultUI] = useState<null | { qualifies: boolean; title: string; message: string }>(null);
+  const [serverResp, setServerResp] = useState<null | { ok: boolean; message: string; title: string; resultKey: "califica" | "nocupo" }>(null);
 
   const utms = useMemo(() => {
     const keys = ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"] as const;
@@ -184,77 +175,88 @@ export default function DiagnosticoContent() {
     setAnswers(prev => ({ ...prev, [qid]: { ...existing, extraText: text } }));
   };
 
-  const canContinueQuestions = useMemo(() => QUESTIONS.every(q => !!answers[q.id]), [answers]);
+  const canContinueQuestions = useMemo(() => {
+    return QUESTIONS.every(q => !!answers[q.id]);
+  }, [answers]);
 
-  const canContinueData = useMemo(
-    () => form.name.trim().length > 1 && form.company.trim().length > 1 && /.+@.+\..+/.test(form.email) && isCorporateEmail(form.email),
-    [form]
-  );
+  const canContinueData = useMemo(() => {
+    return (
+      form.name.trim().length > 1 &&
+      form.company.trim().length > 1 &&
+      /.+@.+\..+/.test(form.email) &&
+      isCorporateEmail(form.email)
+    );
+  }, [form]);
 
+  /* =========================
+     SUBMIT final (usa helper)
+     ========================= */
   const onSubmit = async () => {
     setErrorMsg(null);
-    if (!form.consent) { setErrorMsg("Debes aceptar el consentimiento para continuar."); return; }
+    if (!form.consent) {
+      setErrorMsg("Debes aceptar el consentimiento para continuar.");
+      return;
+    }
     setLoading(true);
+    setServerResp(null);
 
     try {
-      const finalAnswers = Object.values(answers).filter(Boolean) as Answer[];
-      const { score1Count, qualifies, resultText, uiText } = evaluateScore1(finalAnswers);
-      const countryCode  = form.country;
+      // Construir respuestas de forma compacta
+      const finalAnswers = Object.values(answers);
+
+      // Convertir código de país a etiqueta legible (ej. GT -> Guatemala)
       const countryLabel = COUNTRIES.find(c => c.value === form.country)?.label || form.country;
 
-      await submitDiagnostico({
+      // Payload que espera la API (/api/submit): country = LABEL
+      const payload = {
         name: form.name,
         company: form.company,
         email: form.email,
-        countryCode,           // código para pipeline
-        country: countryLabel, // label para mostrar
-        answers: { utms, items: finalAnswers },
-        score1Count,
-        qualifies,
-        resultText,
-      });
+        country: countryLabel,
+        answers: {
+          utms,         // útil para notas en Pipedrive
+          items: finalAnswers,
+        },
+      };
 
-      setResultUI({
-        qualifies,
-        title: qualifies ? "Sí califica" : "No hay cupo (exhaustivo)",
-        message: uiText,
+      await submitDiagnostico(payload);
+
+      // Como el endpoint devuelve { ok: true }, armamos el mensaje localmente
+      setServerResp({
+        ok: true,
+        title: "¡Listo! Aquí está tu resultado",
+        message:
+          "Hemos registrado tus respuestas y te contactaremos en breve. Si calificas, puedes escribirnos por WhatsApp para acelerar el proceso.",
+        resultKey: "califica",
       });
     } catch (e: any) {
-      setErrorMsg(e?.message || "No se logró enviar. Intenta de nuevo.");
+      setServerResp({
+        ok: false,
+        title: "Error",
+        message: e?.message || "No se logró enviar. Intenta de nuevo.",
+        resultKey: "nocupo",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  if (resultUI) {
+  if (serverResp?.ok) {
     return (
       <main className="max-w-3xl mx-auto p-6">
         <div className="w-full h-2 bg-gray-200 rounded mb-6">
           <div className="h-2 bg-blue-500 rounded" style={{ width: "100%" }} />
         </div>
-        <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
-
-        <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
-
-        <a
-          href="https://www.grupoinforum.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block mt-4 px-5 py-3 rounded-2xl bg-[#082a49] text-white"
-        >
-          Visita nuestro website
-        </a>
-
-        {resultUI.qualifies && (
+        <h1 className="text-2xl font-semibold mb-2">{serverResp.title}</h1>
+        <p className="text-gray-700 mb-6">{serverResp.message}</p>
+        {serverResp.resultKey === "califica" ? (
           <a
             href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico"
-            className="inline-block mt-3 px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
-            target="_blank"
-            rel="noopener noreferrer"
+            className="inline-block px-5 py-3 rounded-2xl shadow bg-blue-600 text-white"
           >
             Ir a WhatsApp
           </a>
-        )}
+        ) : null}
       </main>
     );
   }
@@ -270,7 +272,7 @@ export default function DiagnosticoContent() {
       <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
       {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
 
-      {/* Paso 1 */}
+      {/* Paso 1: Preguntas */}
       {step === 1 && (
         <section className="space-y-6">
           {QUESTIONS.map((q) => (
@@ -287,7 +289,9 @@ export default function DiagnosticoContent() {
                       onChange={() => handleSelect(q.id, o.value)}
                       checked={answers[q.id]?.value === o.value}
                     />
-                    <label htmlFor={`${q.id}_${o.value}`} className="cursor-pointer">{o.label}</label>
+                    <label htmlFor={`${q.id}_${o.value}`} className="cursor-pointer">
+                      {o.label}
+                    </label>
                   </div>
                 ))}
               </div>
@@ -313,7 +317,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 2 */}
+      {/* Paso 2: Datos de contacto */}
       {step === 2 && (
         <section className="space-y-4">
           <div>
@@ -350,23 +354,40 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 3 */}
+      {/* Paso 3: Consentimiento y envío */}
       {step === 3 && (
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
             <label className="flex items-start gap-3">
-              <input type="checkbox" checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.consent}
+                onChange={e => setForm({ ...form, consent: e.target.checked })}
+              />
               <span>
                 Autorizo a Grupo Inforum a contactarme respecto a esta evaluación y servicios relacionados. He leído la{" "}
                 {process.env.NEXT_PUBLIC_PRIVACY_URL ? (
-                  <a href={process.env.NEXT_PUBLIC_PRIVACY_URL} className="text-blue-600 underline" target="_blank" rel="noreferrer">Política de Privacidad</a>
-                ) : (<span className="font-medium">Política de Privacidad</span>)}
+                  <a
+                    href={process.env.NEXT_PUBLIC_PRIVACY_URL}
+                    className="text-blue-600 underline"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Política de Privacidad
+                  </a>
+                ) : (
+                  <span className="font-medium">Política de Privacidad</span>
+                )}.
               </span>
             </label>
           </div>
           <div className="flex items-center justify-between gap-3">
             <button onClick={() => setStep(2)} className="px-5 py-3 rounded-2xl border">Atrás</button>
-            <button onClick={onSubmit} disabled={loading || !form.consent} className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50">
+            <button
+              onClick={onSubmit}
+              disabled={loading || !form.consent}
+              className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50"
+            >
               {loading ? "Enviando..." : "Haz clic para conocer tu resultado"}
             </button>
           </div>
