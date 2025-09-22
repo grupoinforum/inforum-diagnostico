@@ -10,9 +10,10 @@ type Payload = {
   email: string;
   country?: string;
   answers?: any;
-  qualifies?: boolean;
+  qualifies?: boolean; // viene del front
 };
 
+// ------------ ENV ------------
 const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
 const PD_API = process.env.PIPEDRIVE_API_KEY!;
 
@@ -20,6 +21,7 @@ const BREVO_USER = process.env.BREVO_SMTP_USER;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS;
 const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 const SITE_URL = "https://grupoinforum.com";
+const SITE_HOST = SITE_URL.replace(/^https?:\/\//, ""); // <-- FIX: precomputado
 
 // Pipelines por país
 const PIPELINES = {
@@ -31,7 +33,7 @@ const PIPELINES = {
   PA: Number(process.env.PD_PIPELINE_PA ?? 6),
 } as const;
 
-// Etapa Capa1
+// Etapas Capa 1
 const STAGE_CAPA1 = {
   GT: Number(process.env.PD_STAGE_GT_CAPA1 ?? 6),
   SV: Number(process.env.PD_STAGE_SV_CAPA1 ?? 7),
@@ -44,8 +46,8 @@ const STAGE_CAPA1 = {
 // ===============================
 // EMAIL BODIES (con video YouTube)
 // ===============================
-const VIDEO_ID   = "Eau96xNp3Ds";
-const VIDEO_URL  = `https://youtu.be/${VIDEO_ID}`;
+const VIDEO_ID = "Eau96xNp3Ds";
+const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
 const VIDEO_THUMB = `https://img.youtube.com/vi/${VIDEO_ID}/hqdefault.jpg`;
 
 function emailBodies(data: Payload) {
@@ -68,15 +70,17 @@ Mira el video: ${VIDEO_URL}
 Visítanos: ${SITE_URL}
 `;
 
-  // HTML
-  const html =
-`<div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111111">
+  // HTML (miniatura clickeable + botón bulletproof)
+  const html = `
+<div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111111">
   <p style="margin:0 0 14px">${lead}</p>
 
+  <!-- Miniatura clickeable -->
   <a href="${VIDEO_URL}" target="_blank" rel="noopener" style="text-decoration:none;border:0;display:inline-block;margin:6px 0 10px">
     <img src="${VIDEO_THUMB}" width="560" style="max-width:100%;height:auto;border:0;display:block;border-radius:12px" alt="Ver video en YouTube" />
   </a>
 
+  <!-- Botón bulletproof (tabla, Outlook-safe) -->
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:6px 0 16px">
     <tr>
       <td bgcolor="#2563EB" style="border-radius:10px">
@@ -91,10 +95,10 @@ Visítanos: ${SITE_URL}
   <p style="margin:16px 0 0">
     Visítanos:
     <a href="${SITE_URL}" target="_blank" rel="noopener" style="color:#2563EB">
-      ${SITE_URL.replace(/^https?:\\/\\//, "")}
+      ${SITE_HOST}
     </a>
   </p>
-</div>`;
+</div>`.trim();
 
   return { subject, text, html };
 }
@@ -108,14 +112,14 @@ function countryToCode(label?: string): keyof typeof PIPELINES {
   if (["GT", "SV", "HN", "DO", "EC", "PA"].includes(x)) return x as any;
 
   const MAP: Record<string, keyof typeof PIPELINES> = {
-    "GUATEMALA": "GT",
+    GUATEMALA: "GT",
     "EL SALVADOR": "SV",
-    "HONDURAS": "HN",
+    HONDURAS: "HN",
     "PANAMÁ": "PA",
-    "PANAMA": "PA",
+    PANAMA: "PA",
     "REPÚBLICA DOMINICANA": "DO",
     "REPUBLICA DOMINICANA": "DO",
-    "ECUADOR": "EC",
+    ECUADOR: "EC",
   };
   return MAP[x] ?? "GT";
 }
@@ -125,7 +129,11 @@ async function pd(path: string, init?: RequestInit) {
   const res = await fetch(url, init);
   const text = await res.text();
   if (!res.ok) throw new Error(`Pipedrive ${path} → ${res.status} ${text}`);
-  try { return JSON.parse(text); } catch { return text as any; }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text as any;
+  }
 }
 
 async function sendConfirmation(data: Payload) {
@@ -166,7 +174,7 @@ export async function POST(req: Request) {
     const pipeline_id = PIPELINES[cc];
     const stage_id = STAGE_CAPA1[cc];
 
-    // Persona
+    // 1) Persona
     let personId: number | null = null;
     try {
       const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
@@ -187,7 +195,7 @@ export async function POST(req: Request) {
       personId = (created as any)?.data?.id;
     }
 
-    // Organización
+    // 2) Organización (opcional)
     let orgId: number | undefined;
     if (data.company) {
       try {
@@ -209,7 +217,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Deal
+    // 3) Deal (Capa 1)
     console.log(`[Deals] Creando deal → cc=${cc} pipeline=${pipeline_id} stage=${stage_id}`);
     const deal = await pd(`/deals`, {
       method: "POST",
@@ -221,13 +229,13 @@ export async function POST(req: Request) {
         pipeline_id,
         stage_id,
         value: 0,
-        currency: "GTQ",
+        currency: "GTQ", // ajusta si quieres por país
       }),
     });
     const dealId = (deal as any)?.data?.id;
     console.log(`🟢 Deal creado #${dealId}`);
 
-    // Nota
+    // 4) Nota
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -245,8 +253,12 @@ export async function POST(req: Request) {
       console.error("[notes POST]", (e as Error).message);
     }
 
-    // Confirmación por correo
-    try { await sendConfirmation(data); } catch (e) { console.error("[email]", (e as Error).message); }
+    // 5) Confirmación por correo
+    try {
+      await sendConfirmation(data);
+    } catch (e) {
+      console.error("[email]", (e as Error).message);
+    }
 
     return NextResponse.json({ ok: true, message: "Deal creado y correo enviado" });
   } catch (e: any) {
