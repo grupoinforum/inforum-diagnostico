@@ -1,11 +1,11 @@
 "use client";
+
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// Forzar renderizado sólo en cliente (el wrapper ya está en page.tsx)
-export const dynamic = "force-dynamic";
-
-// ---- Configuración del cuestionario (tus 7 preguntas originales) ----
+// ==============================
+// Configuración de preguntas
+// ==============================
 const QUESTIONS = [
   {
     id: "industria",
@@ -103,10 +103,18 @@ const COUNTRIES = [
   { value: "EC", label: "Ecuador" },
 ] as const;
 
-type CountryValue = typeof COUNTRIES[number]["value"];
+type CountryValue = (typeof COUNTRIES)[number]["value"];
 
 const FREE_EMAIL_DOMAINS = [
-  "gmail.com","hotmail.com","outlook.com","yahoo.com","icloud.com","proton.me","aol.com","live.com","msn.com"
+  "gmail.com",
+  "hotmail.com",
+  "outlook.com",
+  "yahoo.com",
+  "icloud.com",
+  "proton.me",
+  "aol.com",
+  "live.com",
+  "msn.com",
 ];
 
 function isCorporateEmail(email: string) {
@@ -115,14 +123,14 @@ function isCorporateEmail(email: string) {
   return !FREE_EMAIL_DOMAINS.includes(domain);
 }
 
-/* =========================
-   HELPER: Enviar a la API
-   ========================= */
+// ==============================
+// Helper: llamada a la API
+// ==============================
 async function submitDiagnostico(payload: {
   name: string;
   company?: string;
   email: string;
-  position?: string; // 👈 añadido (no rompe si el backend lo ignora)
+  position?: string; // Puesto
   country?: string;
   answers?: any;
 }) {
@@ -135,67 +143,84 @@ async function submitDiagnostico(payload: {
   if (!res.ok || !json?.ok) {
     throw new Error(json?.error || `Error ${res.status}`);
   }
-  return json; // { ok: true }
+  return json as { ok: true };
 }
 
 export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
-  const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
+
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
 
-  // 👇 añadimos "position" al formulario y lo dejamos vacío por defecto
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    company: string;
+    email: string;
+    position: string; // Puesto
+    country: CountryValue;
+    consent: boolean;
+  }>({
     name: "",
     company: "",
     email: "",
-    position: "",            // 👈 NUEVO
-    country: "GT" as CountryValue,
+    position: "",
+    country: "GT",
     consent: false,
   });
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [serverResp, setServerResp] = useState<null | { ok: boolean; message: string; title: string; resultKey: "califica" | "nocupo" }>(null);
+  const [serverResp, setServerResp] = useState<null | {
+    ok: boolean;
+    message: string;
+    title: string;
+    resultKey: "califica" | "nocupo";
+  }>(null);
 
   const utms = useMemo(() => {
-    const keys = ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"] as const;
-    const x: Record<string,string> = {};
-    keys.forEach(k => { const v = searchParams.get(k); if (v) x[k] = v; });
+    const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
+    const x: Record<string, string> = {};
+    keys.forEach((k) => {
+      const v = searchParams.get(k);
+      if (v) x[k] = v;
+    });
     return x;
   }, [searchParams]);
 
   const progressPct = useMemo(() => (step / 3) * 100, [step]);
 
   const handleSelect = (qid: string, optionValue: string) => {
-    const q = QUESTIONS.find(q => q.id === qid)!;
-    const opt = q.options.find(o => o.value === optionValue)!;
-    setAnswers(prev => ({ ...prev, [qid]: { id: qid, value: optionValue, score: (opt.score as 1|2) } }));
+    const q = QUESTIONS.find((qq) => qq.id === qid)!;
+    const opt = q.options.find((o) => o.value === optionValue)!;
+    setAnswers((prev) => ({
+      ...prev,
+      [qid]: { id: qid, value: optionValue, score: opt.score as 1 | 2 },
+    }));
   };
 
   const handleExtraText = (qid: string, text: string) => {
     const existing = answers[qid];
     if (!existing) return;
-    setAnswers(prev => ({ ...prev, [qid]: { ...existing, extraText: text } }));
+    setAnswers((prev) => ({ ...prev, [qid]: { ...existing, extraText: text } }));
   };
 
   const canContinueQuestions = useMemo(() => {
-    return QUESTIONS.every(q => !!answers[q.id]);
+    return QUESTIONS.every((q) => !!answers[q.id]);
   }, [answers]);
 
-  // 👇 validación: ahora requiere position (puesto) con longitud > 1
   const canContinueData = useMemo(() => {
     return (
       form.name.trim().length > 1 &&
       form.company.trim().length > 1 &&
       /.+@.+\..+/.test(form.email) &&
       isCorporateEmail(form.email) &&
-      form.position.trim().length > 1 // 👈 NUEVO
+      form.position.trim().length > 1
     );
   }, [form]);
 
-  /* =========================
-     SUBMIT final (usa helper)
-     ========================= */
+  // ==============================
+  // Submit final
+  // ==============================
   const onSubmit = async () => {
     setErrorMsg(null);
     if (!form.consent) {
@@ -206,28 +231,20 @@ export default function DiagnosticoContent() {
     setServerResp(null);
 
     try {
-      // Construir respuestas de forma compacta
       const finalAnswers = Object.values(answers);
+      const countryLabel = COUNTRIES.find((c) => c.value === form.country)?.label || form.country;
 
-      // Convertir código de país a etiqueta legible (ej. GT -> Guatemala)
-      const countryLabel = COUNTRIES.find(c => c.value === form.country)?.label || form.country;
-
-      // Payload que espera la API (/api/submit)
       const payload = {
         name: form.name,
         company: form.company,
         email: form.email,
-        position: form.position, // 👈 NUEVO (opcional en backend)
+        position: form.position, // ← se envía al backend
         country: countryLabel,
-        answers: {
-          utms,         // útil para notas en Pipedrive
-          items: finalAnswers,
-        },
+        answers: { utms, items: finalAnswers },
       };
 
       await submitDiagnostico(payload);
 
-      // Como el endpoint devuelve { ok: true }, armamos el mensaje localmente
       setServerResp({
         ok: true,
         title: "¡Listo! Aquí está tu resultado",
@@ -301,11 +318,11 @@ export default function DiagnosticoContent() {
                   </div>
                 ))}
               </div>
-              {q.options.some(o => (o as any).requiresText) && answers[q.id]?.value?.includes("otro") && (
+              {q.options.some((o) => (o as any).requiresText) && answers[q.id]?.value?.includes("otro") && (
                 <input
                   type="text"
                   placeholder="Especifica aquí"
-                  className="mt-3 w/full border rounded-xl px-3 py-2"
+                  className="mt-3 w-full border rounded-xl px-3 py-2"
                   onChange={(e) => handleExtraText(q.id, e.target.value)}
                 />
               )}
@@ -328,17 +345,31 @@ export default function DiagnosticoContent() {
         <section className="space-y-4">
           <div>
             <label className="block mb-1">Nombre</label>
-            <input className="w-full border rounded-xl px-3 py-2" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
           </div>
           <div>
             <label className="block mb-1">Empresa</label>
-            <input className="w-full border rounded-xl px-3 py-2" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} />
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.company}
+              onChange={(e) => setForm({ ...form, company: e.target.value })}
+            />
           </div>
           <div>
             <label className="block mb-1">Correo empresarial</label>
-            <input className="w-full border rounded-xl px-3 py-2" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
             {form.email && !isCorporateEmail(form.email) && (
-              <p className="text-sm text-red-600 mt-1">Usa un correo corporativo (no gmail/hotmail/outlook/yahoo, etc.).</p>
+              <p className="text-sm text-red-600 mt-1">
+                Usa un correo corporativo (no gmail/hotmail/outlook/yahoo, etc.).
+              </p>
             )}
           </div>
 
@@ -348,19 +379,30 @@ export default function DiagnosticoContent() {
             <input
               className="w-full border rounded-xl px-3 py-2"
               value={form.position}
-              onChange={e => setForm({ ...form, position: e.target.value })}
+              onChange={(e) => setForm({ ...form, position: e.target.value })}
               placeholder="Gerente de IT, Director Financiero…"
             />
           </div>
 
           <div>
             <label className="block mb-1">País</label>
-            <select className="w-full border rounded-xl px-3 py-2" value={form.country} onChange={e => setForm({ ...form, country: e.target.value as CountryValue })}>
-              {COUNTRIES.map(c => (<option key={c.value} value={c.value}>{c.label}</option>))}
+            <select
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.country}
+              onChange={(e) => setForm({ ...form, country: e.target.value as CountryValue })}
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
             </select>
           </div>
+
           <div className="flex items-center justify-between gap-3 pt-2">
-            <button onClick={() => setStep(1)} className="px-5 py-3 rounded-2xl border">Atrás</button>
+            <button onClick={() => setStep(1)} className="px-5 py-3 rounded-2xl border">
+              Atrás
+            </button>
             <button
               onClick={() => setStep(3)}
               disabled={!canContinueData}
@@ -380,7 +422,7 @@ export default function DiagnosticoContent() {
               <input
                 type="checkbox"
                 checked={form.consent}
-                onChange={e => setForm({ ...form, consent: e.target.checked })}
+                onChange={(e) => setForm({ ...form, consent: e.target.checked })}
               />
               <span>
                 Autorizo a Grupo Inforum a contactarme respecto a esta evaluación y servicios relacionados. He leído la{" "}
@@ -395,12 +437,16 @@ export default function DiagnosticoContent() {
                   </a>
                 ) : (
                   <span className="font-medium">Política de Privacidad</span>
-                )}.
+                )}
+                .
               </span>
             </label>
           </div>
+
           <div className="flex items-center justify-between gap-3">
-            <button onClick={() => setStep(2)} className="px-5 py-3 rounded-2xl border">Atrás</button>
+            <button onClick={() => setStep(2)} className="px-5 py-3 rounded-2xl border">
+              Atrás
+            </button>
             <button
               onClick={onSubmit}
               disabled={loading || !form.consent}
