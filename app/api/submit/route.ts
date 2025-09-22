@@ -25,6 +25,25 @@ const VIDEO_ID = "Eau96xNp3Ds";
 const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
 const VIDEO_THUMB = `https://img.youtube.com/vi/${VIDEO_ID}/hqdefault.jpg`;
 
+/* Un ícono de play rojo estilo YouTube como SVG embebido (transparente, con sombra suave) */
+const PLAY_SVG_DATA_URI =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="98" viewBox="0 0 140 98">
+  <defs>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4"/><feOffset dy="2"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#s)">
+    <rect x="0" y="0" rx="22" ry="22" width="140" height="98" fill="#FF0000"/>
+    <polygon points="58,30 58,68 92,49" fill="#FFFFFF"/>
+  </g>
+</svg>
+`);
+
 /* ========= EMAIL BODIES ========= */
 function emailBodies(data: Payload) {
   const qualifies = !!data.qualifies;
@@ -44,41 +63,37 @@ Ver video: ${VIDEO_URL}
 
 Website: ${SITE_URL}`.trim();
 
-  // ===== HTML con overlay centrado “▶ Reproducir” (Gmail/Apple Mail) + VML para Outlook =====
+  /* =========
+     HTML: Miniatura + PLAY centrado (stacking “bulletproof”)
+     - 1) Imagen miniatura
+     - 2) Imagen del play rojo, con margin-top negativo en %
+         para posicionarla sobre la miniatura, y margin-bottom
+         positivo para recuperar el flujo del layout.
+     - 3) Botón principal “Visita nuestro website”
+     ========= */
   const html = `
 <div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111">
   <p style="margin:0 0 14px">${lead}</p>
 
-  <!--[if mso]>
-  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
-    arcsize="6%" stroke="f" fill="t" style="width:560px;height:315px;">
-    <v:fill type="frame" src="${VIDEO_THUMB}" color="#000000" />
-    <w:anchorlock/>
-    <center style="text-align:center">
-      <a href="${VIDEO_URL}" style="text-decoration:none;">
-        <span style="font-family:Arial,sans-serif;display:inline-block;padding:12px 18px;border-radius:9999px;background:#000000;color:#ffffff;font-weight:700;">
-          ▶ Reproducir
-        </span>
-      </a>
-    </center>
-  </v:roundrect>
-  <![endif]-->
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 18px">
+    <tr>
+      <td align="center" style="padding:0">
+        <a href="${VIDEO_URL}" target="_blank" rel="noopener" style="text-decoration:none;border:0;">
+          <img src="${VIDEO_THUMB}" width="560" alt="Ver video en YouTube"
+               style="display:block;max-width:100%;height:auto;border:0;border-radius:12px;line-height:0" />
+        </a>
 
-  <!--[if !mso]><!-- -->
-  <a href="${VIDEO_URL}" target="_blank" rel="noopener"
-     style="position:relative;display:inline-block;line-height:0;border-radius:12px;overflow:hidden;margin:6px 0 18px">
-    <img src="${VIDEO_THUMB}" width="560"
-         style="display:block;max-width:100%;height:auto;border:0" alt="Ver video en YouTube" />
-    <span style="
-      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-      background:#000000cc;border-radius:9999px;padding:12px 18px;
-      color:#ffffff;font-weight:700;font-size:16px;font-family:Arial,sans-serif;line-height:16px;">
-      ▶ Reproducir
-    </span>
-  </a>
-  <!--<![endif]-->
+        <!-- PLAY rojo centrado (stacked image). 
+             Ajusta los porcentajes si cambias la relación de aspecto de la miniatura -->
+        <a href="${VIDEO_URL}" target="_blank" rel="noopener" style="text-decoration:none;border:0;display:block;line-height:0;">
+          <img src="${PLAY_SVG_DATA_URI}" width="140" height="98" alt="Reproducir"
+               style="display:block;border:0;margin-top:-32%;margin-bottom:16%;height:auto;" />
+        </a>
+      </td>
+    </tr>
+  </table>
 
-  <!-- Botón principal -->
+  <!-- CTA único -->
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0">
     <tr>
       <td bgcolor="#082a49" style="border-radius:10px">
