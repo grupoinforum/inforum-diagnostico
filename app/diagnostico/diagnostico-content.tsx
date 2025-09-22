@@ -18,7 +18,7 @@ const QUESTIONS = [
       { value: "produccion", label: "Producción", score: 2 },
       { value: "distribucion", label: "Distribución", score: 2 },
       { value: "retail", label: "Retail", score: 2 },
-      { value: "servicios", label: "Servicios", score: 2 }, // ✅ corregido a 2
+      { value: "servicios", label: "Servicios", score: 2 },
       { value: "otro", label: "Otro (especificar)", score: 1, requiresText: true },
     ],
     required: true,
@@ -31,7 +31,7 @@ const QUESTIONS = [
       { value: "sapb1", label: "SAP Business One", score: 2 },
       { value: "odoo", label: "Odoo", score: 2 },
       { value: "oracle", label: "Oracle", score: 2 },
-      { value: "msdynamics", label: "Microsoft Dynamics", score: 2 }, // ✅ corregido a 2
+      { value: "msdynamics", label: "Microsoft Dynamics", score: 2 },
       { value: "sistema_propio", label: "Sistema Propio", score: 2 },
       { value: "erp_otro", label: "Otro (especificar)", score: 2, requiresText: true },
     ],
@@ -119,19 +119,19 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   TEXTOS DE RESULTADO UI
+   TEXTOS DE RESULTADO UI (HTML con <a>)
    ========================= */
-const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. 
-Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera. 
+const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.
+Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.
 Acabamos de enviarte un correo con esta información.
 
-Visítanos: www.grupoinforum.com`;
+Visítanos: <a href="https://www.grupoinforum.com" target="_blank" rel="noopener noreferrer">www.grupoinforum.com</a>`;
 
-const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. 
-Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros. 
+const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno.
+Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros.
 Te estaremos contactando al liberar espacio.
 
-Visítanos: www.grupoinforum.com`;
+Visítanos: <a href="https://www.grupoinforum.com" target="_blank" rel="noopener noreferrer">www.grupoinforum.com</a>`;
 
 /* =========================
    EVALUACIÓN
@@ -153,7 +153,6 @@ async function submitDiagnostico(payload: any) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  // El backend puede responder {ok:true} o similar; no dependemos del texto
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(json?.error || `Error ${res.status}`);
@@ -180,7 +179,7 @@ export default function DiagnosticoContent() {
   const [resultUI, setResultUI] = useState<null | {
     qualifies: boolean;
     title: string;
-    message: string;
+    message: string; // HTML
   }>(null);
 
   const utms = useMemo(() => {
@@ -234,7 +233,6 @@ export default function DiagnosticoContent() {
       const { score1Count, qualifies, resultText, uiText } = evaluateScore1(finalAnswers);
       const countryLabel = COUNTRIES.find(c => c.value === form.country)?.label || form.country;
 
-      // Enviar todo al backend
       await submitDiagnostico({
         name: form.name,
         company: form.company,
@@ -246,14 +244,13 @@ export default function DiagnosticoContent() {
         },
         score1Count,
         qualifies,
-        resultText, // "Sí califica" | "No hay cupo (exhaustivo)"
+        resultText,
       });
 
-      // Mostrar mensaje en UI
       setResultUI({
         qualifies,
         title: qualifies ? "Sí califica" : "No hay cupo (exhaustivo)",
-        message: uiText,
+        message: uiText, // HTML con <a>
       });
     } catch (e: any) {
       setErrorMsg(e?.message || "No se logró enviar. Intenta de nuevo.");
@@ -272,7 +269,13 @@ export default function DiagnosticoContent() {
           <div className="h-2 bg-blue-500 rounded" style={{ width: "100%" }} />
         </div>
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
-        <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
+
+        {/* mensaje con link clickeable */}
+        <div
+          className="whitespace-pre-line text-gray-800 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: resultUI.message }}
+        />
+
         {resultUI.qualifies && (
           <a
             href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico"
@@ -283,14 +286,6 @@ export default function DiagnosticoContent() {
             Ir a WhatsApp
           </a>
         )}
-        <a
-          href="https://www.grupoinforum.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block mt-4 underline"
-        >
-          Visítanos: www.grupoinforum.com
-        </a>
       </main>
     );
   }
