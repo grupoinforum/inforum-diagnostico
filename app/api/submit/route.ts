@@ -10,110 +10,168 @@ type Payload = {
   name: string;
   company?: string;
   email: string;
-  country?: string;         // "Guatemala", "El Salvador", etc.
-  answers?: any;            // { utms, items: [...] }
+  country?: string;      // Label (ej. "Guatemala") para la nota (opcional)
+  countryCode?: string;  // Código ISO que mandas del front: "GT" | "SV" | "HN" | "PA" | "DO" | "EC"
+  answers?: any;         // { utms, items: [...] }
   score1Count?: number;
   qualifies?: boolean;
-  resultText?: string;      // "Sí califica" | "No hay cupo (exhaustivo)"
+  resultText?: string;   // "Sí califica" | "No hay cupo (exhaustivo)"
 };
 
-/* ========= ENV ========= */
-const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
-const PD_API = process.env.PIPEDRIVE_API_KEY!;
+type PDItem = { id: number };
+
+/* ========= ENV Pipedrive ========= */
+const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;       // ej: "inforum"
+const PD_API    = process.env.PIPEDRIVE_API_KEY!;
+
+const PD_DEFAULT_PIPELINE_ID = toNum(process.env.PD_DEFAULT_PIPELINE_ID);
+const PD_DEFAULT_STAGE_ID    = toNum(process.env.PD_DEFAULT_STAGE_ID);
+
+const PD_GT_PIPELINE_ID = toNum(process.env.PD_GT_PIPELINE_ID);
+const PD_GT_STAGE_ID    = toNum(process.env.PD_GT_STAGE_ID);
+const PD_SV_PIPELINE_ID = toNum(process.env.PD_SV_PIPELINE_ID);
+const PD_SV_STAGE_ID    = toNum(process.env.PD_SV_STAGE_ID);
+const PD_HN_PIPELINE_ID = toNum(process.env.PD_HN_PIPELINE_ID);
+const PD_HN_STAGE_ID    = toNum(process.env.PD_HN_STAGE_ID);
+const PD_PA_PIPELINE_ID = toNum(process.env.PD_PA_PIPELINE_ID);
+const PD_PA_STAGE_ID    = toNum(process.env.PD_PA_STAGE_ID);
+const PD_DO_PIPELINE_ID = toNum(process.env.PD_DO_PIPELINE_ID);
+const PD_DO_STAGE_ID    = toNum(process.env.PD_DO_STAGE_ID);
+const PD_EC_PIPELINE_ID = toNum(process.env.PD_EC_PIPELINE_ID);
+const PD_EC_STAGE_ID    = toNum(process.env.PD_EC_STAGE_ID);
+
+/* ========= SMTP ========= */
 const BREVO_USER = process.env.BREVO_SMTP_USER!;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS!;
 const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 
 /* ========= Sitio & Video ========= */
-const SITE_URL = "https://grupoinforum.com";
-const VIDEO_ID = "Eau96xNp3Ds";
-const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
+const SITE_URL    = "https://grupoinforum.com";
+const VIDEO_ID    = "Eau96xNp3Ds";
+const VIDEO_URL   = `https://youtu.be/${VIDEO_ID}`;
 const VIDEO_IMAGE = "https://inforum-diagnostico.vercel.app/video.png";
 
-/* ========= Helpers ========= */
-function normCountry(c?: string) {
-  if (!c) return "";
-  const s = c.trim().toLowerCase();
-  if (s.includes("guatemala")) return "GT";
-  if (s.includes("salvador")) return "SV";
-  if (s.includes("honduras")) return "HN";
-  if (s.includes("panamá") || s.includes("panama")) return "PA";
-  if (s.includes("dominican")) return "DO";
-  if (s.includes("ecuador")) return "EC";
-  return "";
+/* ========= Utils ========= */
+function toNum(v: any): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+function pdUrl(path: string) {
+  return `https://${PD_DOMAIN}.pipedrive.com/v1${path}?api_token=${PD_API}`;
+}
+async function pdJson(res: Response) {
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { raw: text }; }
 }
 
-function getPipelineStageByCountry(country?: string) {
-  const cc = normCountry(country);
-  // Fallback global
-  const fallback = {
-    pipeline_id: Number(process.env.PD_DEFAULT_PIPELINE_ID || 0) || undefined,
-    stage_id: Number(process.env.PD_DEFAULT_STAGE_ID || 0) || undefined,
-  };
-
-  const table: Record<string, { pipeline_id?: number; stage_id?: number }> = {
-    GT: {
-      pipeline_id: Number(process.env.PD_GT_PIPELINE_ID || 0) || undefined,
-      stage_id: Number(process.env.PD_GT_STAGE_ID || 0) || undefined,
-    },
-    SV: {
-      pipeline_id: Number(process.env.PD_SV_PIPELINE_ID || 0) || undefined,
-      stage_id: Number(process.env.PD_SV_STAGE_ID || 0) || undefined,
-    },
-    HN: {
-      pipeline_id: Number(process.env.PD_HN_PIPELINE_ID || 0) || undefined,
-      stage_id: Number(process.env.PD_HN_STAGE_ID || 0) || undefined,
-    },
-    PA: {
-      pipeline_id: Number(process.env.PD_PA_PIPELINE_ID || 0) || undefined,
-      stage_id: Number(process.env.PD_PA_STAGE_ID || 0) || undefined,
-    },
-    DO: {
-      pipeline_id: Number(process.env.PD_DO_PIPELINE_ID || 0) || undefined,
-      stage_id: Number(process.env.PD_DO_STAGE_ID || 0) || undefined,
-    },
-    EC: {
-      pipeline_id: Number(process.env.PD_EC_PIPELINE_ID || 0) || undefined,
-      stage_id: Number(process.env.PD_EC_STAGE_ID || 0) || undefined,
-    },
-  };
-
-  const pick = table[cc];
-  return (pick && (pick.pipeline_id || pick.stage_id)) ? pick : fallback;
-}
-
-/* ========= Pipedrive: Create Deal ========= */
-async function pdCreateDeal(data: Payload) {
-  if (!PD_DOMAIN || !PD_API) {
-    throw new Error("Config Pipedrive incompleta (PIPEDRIVE_DOMAIN/API_KEY).");
+/** Elige pipeline/stage por código de país (GT, SV, HN, PA, DO, EC).
+ *  Si no matchea o no hay envs, usa el DEFAULT. */
+function pickByCode(code?: string) {
+  const cc = (code || "").trim().toUpperCase();
+  switch (cc) {
+    case "GT": return { pipeline_id: PD_GT_PIPELINE_ID, stage_id: PD_GT_STAGE_ID };
+    case "SV": return { pipeline_id: PD_SV_PIPELINE_ID, stage_id: PD_SV_STAGE_ID };
+    case "HN": return { pipeline_id: PD_HN_PIPELINE_ID, stage_id: PD_HN_STAGE_ID };
+    case "PA": return { pipeline_id: PD_PA_PIPELINE_ID, stage_id: PD_PA_STAGE_ID };
+    case "DO": return { pipeline_id: PD_DO_PIPELINE_ID, stage_id: PD_DO_STAGE_ID };
+    case "EC": return { pipeline_id: PD_EC_PIPELINE_ID, stage_id: PD_EC_STAGE_ID };
+    default:   return { pipeline_id: PD_DEFAULT_PIPELINE_ID, stage_id: PD_DEFAULT_STAGE_ID };
   }
-  const url = `https://${PD_DOMAIN}.pipedrive.com/v1/deals?api_token=${PD_API}`;
+}
 
-  const { pipeline_id, stage_id } = getPipelineStageByCountry(data.country);
+/** Respaldo por label (para envíos viejos sin countryCode) */
+function pickByLabel(label?: string) {
+  const s = (label || "").toLowerCase();
+  if (s.includes("guatemala")) return pickByCode("GT");
+  if (s.includes("salvador"))  return pickByCode("SV");
+  if (s.includes("honduras"))  return pickByCode("HN");
+  if (s.includes("panam"))     return pickByCode("PA"); // panamá/panama
+  if (s.includes("dominican")) return pickByCode("DO");
+  if (s.includes("dominicana"))return pickByCode("DO");
+  if (s.includes("ecuador"))   return pickByCode("EC");
+  return pickByCode(undefined);
+}
+
+function pickPipelineStage(countryCode?: string, countryLabel?: string) {
+  return countryCode ? pickByCode(countryCode) : pickByLabel(countryLabel);
+}
+
+/* ========= Pipedrive: upsert Persona por email ========= */
+async function upsertPersonByEmail(name: string, email: string): Promise<PDItem | undefined> {
+  if (!email) return;
+  const search = await fetch(
+    pdUrl(`/persons/search`) + `&term=${encodeURIComponent(email)}&fields=email&exact_match=true`,
+    { method: "GET" }
+  );
+  const sJson = await pdJson(search);
+  const found = sJson?.data?.items?.[0]?.item;
+  if (search.ok && found?.id) return { id: found.id };
+
+  const res = await fetch(pdUrl(`/persons`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: name || email,
+      email: [{ value: email, primary: true, label: "work" }],
+    }),
+  });
+  const j = await pdJson(res);
+  if (!res.ok || !j?.data?.id) {
+    throw new Error(`Pipedrive person create error: ${res.status} ${JSON.stringify(j)}`);
+  }
+  return { id: j.data.id };
+}
+
+/* ========= Pipedrive: upsert Organización por nombre ========= */
+async function upsertOrganizationByName(name?: string): Promise<PDItem | undefined> {
+  if (!name) return;
+  const search = await fetch(
+    pdUrl(`/organizations/search`) + `&term=${encodeURIComponent(name)}&exact_match=true`,
+    { method: "GET" }
+  );
+  const sJson = await pdJson(search);
+  const found = sJson?.data?.items?.[0]?.item;
+  if (search.ok && found?.id) return { id: found.id };
+
+  const res = await fetch(pdUrl(`/organizations`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const j = await pdJson(res);
+  if (!res.ok || !j?.data?.id) {
+    throw new Error(`Pipedrive org create error: ${res.status} ${JSON.stringify(j)}`);
+  }
+  return { id: j.data.id };
+}
+
+/* ========= Pipedrive: crear Deal ========= */
+async function createDeal(data: Payload, person?: PDItem, org?: PDItem): Promise<PDItem> {
+  const { pipeline_id, stage_id } = pickPipelineStage(data.countryCode, data.country);
 
   const body: any = {
     title: `[Diagnóstico] ${data.name}${data.company ? ` – ${data.company}` : ""}`,
     visible_to: 3, // Entire company
   };
+  if (person?.id) body.person_id = person.id;
+  if (org?.id) body.org_id = org.id;
   if (pipeline_id) body.pipeline_id = pipeline_id;
   if (stage_id) body.stage_id = stage_id;
 
-  const res = await fetch(url, {
+  const res = await fetch(pdUrl(`/deals`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || !json?.data?.id) {
-    throw new Error(`Pipedrive create deal error: ${res.status} ${JSON.stringify(json)}`);
+  const j = await pdJson(res);
+  if (!res.ok || !j?.data?.id) {
+    throw new Error(`Pipedrive deal create error: ${res.status} ${JSON.stringify(j)}`);
   }
-  return json.data as { id: number };
+  return { id: j.data.id };
 }
 
-/* ========= Pipedrive: Create Note for Deal ========= */
-async function pdCreateNoteForDeal(dealId: number, data: Payload) {
-  const url = `https://${PD_DOMAIN}.pipedrive.com/v1/notes?api_token=${PD_API}`;
-
+/* ========= Pipedrive: nota en Deal ========= */
+async function createNoteForDeal(dealId: number, data: Payload) {
   const utms = data?.answers?.utms ? JSON.stringify(data.answers.utms) : "";
   const respuestas = data?.answers?.items ? JSON.stringify(data.answers.items, null, 2) : "";
 
@@ -122,7 +180,7 @@ async function pdCreateNoteForDeal(dealId: number, data: Payload) {
 Nombre: ${data.name}
 Empresa: ${data.company || "-"}
 Email: ${data.email}
-País: ${data.country || "-"}
+País: ${data.country || "-"} (${(data.countryCode || "").toUpperCase() || "-"})
 Resultado: ${data.resultText || "-"}
 Qualifies: ${data.qualifies ? "Sí" : "No"}
 Score1Count: ${data.score1Count ?? "-"}
@@ -132,18 +190,13 @@ UTMs: ${utms}
 Respuestas:
 ${respuestas}`.trim();
 
-  const body = { content, deal_id: dealId };
-
-  const res = await fetch(url, {
+  const res = await fetch(pdUrl(`/notes`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ content, deal_id: dealId }),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(`Pipedrive create note error: ${res.status} ${JSON.stringify(json)}`);
-  }
-  return json.data;
+  const j = await pdJson(res);
+  if (!res.ok) throw new Error(`Pipedrive note create error: ${res.status} ${JSON.stringify(j)}`);
 }
 
 /* ========= Email ========= */
@@ -193,6 +246,9 @@ Website: ${SITE_URL}`.trim();
 /* ========= Handler ========= */
 export async function POST(req: Request) {
   try {
+    if (!PD_DOMAIN || !PD_API) {
+      throw new Error("Faltan PIPEDRIVE_DOMAIN o PIPEDRIVE_API_KEY.");
+    }
     const data = (await req.json()) as Payload;
 
     if (!data?.name || !data?.email) {
@@ -202,31 +258,30 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Crear DEAL (por país) en Pipedrive
-    const deal = await pdCreateDeal(data);
+    // 1) Upsert persona y organización
+    const [person, org] = await Promise.all([
+      upsertPersonByEmail(data.name, data.email),
+      upsertOrganizationByName(data.company),
+    ]);
 
-    // 2) Nota en el deal con todo el detalle del diagnóstico
-    await pdCreateNoteForDeal(deal.id, data);
+    // 2) Crear Deal (por código de país si viene; si no, por label)
+    const deal = await createDeal(data, person, org);
 
-    // 3) Enviar correo al usuario
+    // 3) Nota con todo el detalle del diagnóstico
+    await createNoteForDeal(deal.id, data);
+
+    // 4) Email al usuario
     const transporter = nodemailer.createTransport({
       host: "smtp-relay.brevo.com",
       port: 587,
       auth: { user: BREVO_USER, pass: BREVO_PASS },
     });
-
     const { subject, text, html } = buildEmail(data);
-    await transporter.sendMail({
-      from: EMAIL_FROM,
-      to: data.email,
-      subject,
-      text,
-      html,
-    });
+    await transporter.sendMail({ from: EMAIL_FROM, to: data.email, subject, text, html });
 
     return NextResponse.json({
       ok: true,
-      message: "Deal creado por país + nota + correo enviado",
+      message: "Deal creado por país + persona/organización enlazadas + nota + correo enviado",
       dealId: deal.id,
     });
   } catch (err: any) {
