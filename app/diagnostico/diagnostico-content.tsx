@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// (el wrapper en page.tsx ya es force-dynamic)
 export const dynamic = "force-dynamic";
 
 /* =========================
@@ -119,19 +118,15 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   TEXTOS DE RESULTADO UI (HTML con <a>)
+   TEXTOS DE RESULTADO UI (SIN “Visítanos”)
    ========================= */
 const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo.
 Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera.
-Acabamos de enviarte un correo con esta información.
-
-Visítanos: <a href="https://www.grupoinforum.com" target="_blank" rel="noopener noreferrer">www.grupoinforum.com</a>`;
+Acabamos de enviarte un correo con esta información.`;
 
 const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno.
 Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros.
-Te estaremos contactando al liberar espacio.
-
-Visítanos: <a href="https://www.grupoinforum.com" target="_blank" rel="noopener noreferrer">www.grupoinforum.com</a>`;
+Te estaremos contactando al liberar espacio.`;
 
 /* =========================
    EVALUACIÓN
@@ -185,7 +180,7 @@ export default function DiagnosticoContent() {
   const [resultUI, setResultUI] = useState<null | {
     qualifies: boolean;
     title: string;
-    message: string; // HTML
+    message: string; // texto simple
   }>(null);
 
   const utms = useMemo(() => {
@@ -256,7 +251,7 @@ export default function DiagnosticoContent() {
       setResultUI({
         qualifies,
         title: qualifies ? "Sí califica" : "No hay cupo (exhaustivo)",
-        message: uiText, // HTML con <a>
+        message: uiText, // texto sin "Visítanos"
       });
     } catch (e: any) {
       setErrorMsg(e?.message || "No se logró enviar. Intenta de nuevo.");
@@ -276,11 +271,20 @@ export default function DiagnosticoContent() {
         </div>
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
 
-        {/* mensaje con link clickeable */}
-        <div
-          className="whitespace-pre-line text-gray-800 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: resultUI.message }}
-        />
+        {/* mensaje (sin link adentro) */}
+        <p className="whitespace-pre-line text-gray-800 leading-relaxed">
+          {resultUI.message}
+        </p>
+
+        {/* ÚNICO link "Visítanos" */}
+        <a
+          href="https://www.grupoinforum.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block mt-4 underline"
+        >
+          Visítanos: www.grupoinforum.com
+        </a>
 
         {resultUI.qualifies && (
           <a
@@ -412,7 +416,7 @@ export default function DiagnosticoContent() {
                   </a>
                 ) : (
                   <span className="font-medium">Política de Privacidad</span>
-                )}
+                )}.
               </span>
             </label>
           </div>
