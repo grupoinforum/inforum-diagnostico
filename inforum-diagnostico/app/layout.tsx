@@ -8,7 +8,11 @@ export const metadata: Metadata = {
   description: "Ir directo al cuestionario.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="es">
       <body className="page-shell">
@@ -20,28 +24,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               alt="Inforum"
               width={160}
               height={36}
-              className="logo"
+              className="h-9 w-auto object-contain"
               priority
             />
           </div>
         </header>
 
-        {/* CONTENIDO */}
-        <main id="content" className="content-wrap">
-          {children}
-        </main>
+        <main className="page-container">{children}</main>
 
-        {/* FOOTER responsive */}
+        {/* FOOTER (el tuyo con imagen) */}
         <footer className="site-footer">
-          <picture className="footer-picture">
-            {/* móvil */}
+          <picture>
             <source media="(max-width: 640px)" srcSet="/footer-mobile.jpg" />
-            {/* tablet/desktop */}
             <img
               src="/footer-web.jpg"
               alt="Footer Inforum"
-              className="footer-img"
-              loading="eager"
+              style={{ width: "100%", height: "auto", display: "block" }}
             />
           </picture>
         </footer>
@@ -49,10 +47,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-export default function Page() {
-  return (
-    <div className="quiz">   {/* <-- añade solo este wrapper */}
-      {/* TODO: aquí va tu cuestionario tal como ya lo tienes */}
-    </div>
-  );
-}
+
