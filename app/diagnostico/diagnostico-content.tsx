@@ -117,6 +117,12 @@ function isCorporateEmail(email: string) {
   return !FREE_EMAIL_DOMAINS.includes(domain);
 }
 
+// 🔹 Helper para limpiar líneas duplicadas "Visítanos:"
+function stripVisitLine(text: string) {
+  return text.replace(/^\s*Visítanos:.*$/gmi, "").trim();
+}
+
+
 /* =========================
    TEXTOS DE RESULTADO UI (SIN “Visítanos”)
    ========================= */
