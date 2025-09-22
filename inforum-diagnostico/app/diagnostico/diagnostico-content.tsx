@@ -122,6 +122,7 @@ async function submitDiagnostico(payload: {
   name: string;
   company?: string;
   email: string;
+  position?: string; // 👈 añadido (no rompe si el backend lo ignora)
   country?: string;
   answers?: any;
 }) {
@@ -141,13 +142,17 @@ export default function DiagnosticoContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1); // 1 preguntas, 2 datos, 3 consentimiento
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
+
+  // 👇 añadimos "position" al formulario y lo dejamos vacío por defecto
   const [form, setForm] = useState({
     name: "",
     company: "",
     email: "",
+    position: "",            // 👈 NUEVO
     country: "GT" as CountryValue,
     consent: false,
   });
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [serverResp, setServerResp] = useState<null | { ok: boolean; message: string; title: string; resultKey: "califica" | "nocupo" }>(null);
@@ -177,12 +182,14 @@ export default function DiagnosticoContent() {
     return QUESTIONS.every(q => !!answers[q.id]);
   }, [answers]);
 
+  // 👇 validación: ahora requiere position (puesto) con longitud > 1
   const canContinueData = useMemo(() => {
     return (
       form.name.trim().length > 1 &&
       form.company.trim().length > 1 &&
       /.+@.+\..+/.test(form.email) &&
-      isCorporateEmail(form.email)
+      isCorporateEmail(form.email) &&
+      form.position.trim().length > 1 // 👈 NUEVO
     );
   }, [form]);
 
@@ -210,6 +217,7 @@ export default function DiagnosticoContent() {
         name: form.name,
         company: form.company,
         email: form.email,
+        position: form.position, // 👈 NUEVO (opcional en backend)
         country: countryLabel,
         answers: {
           utms,         // útil para notas en Pipedrive
@@ -297,7 +305,7 @@ export default function DiagnosticoContent() {
                 <input
                   type="text"
                   placeholder="Especifica aquí"
-                  className="mt-3 w-full border rounded-xl px-3 py-2"
+                  className="mt-3 w/full border rounded-xl px-3 py-2"
                   onChange={(e) => handleExtraText(q.id, e.target.value)}
                 />
               )}
@@ -333,6 +341,18 @@ export default function DiagnosticoContent() {
               <p className="text-sm text-red-600 mt-1">Usa un correo corporativo (no gmail/hotmail/outlook/yahoo, etc.).</p>
             )}
           </div>
+
+          {/* Puesto (obligatorio) */}
+          <div>
+            <label className="block mb-1">Puesto</label>
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.position}
+              onChange={e => setForm({ ...form, position: e.target.value })}
+              placeholder="Gerente de IT, Director Financiero…"
+            />
+          </div>
+
           <div>
             <label className="block mb-1">País</label>
             <select className="w-full border rounded-xl px-3 py-2" value={form.country} onChange={e => setForm({ ...form, country: e.target.value as CountryValue })}>
