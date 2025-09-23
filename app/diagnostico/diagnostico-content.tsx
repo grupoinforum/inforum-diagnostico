@@ -113,17 +113,17 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   EVALUACIÓN (≤3 score=1 ⇒ califica)
+   EVALUACIÓN (≤3 con score=1 ⇒ califica)
    ========================= */
-const SUCCESS_TEXT = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera. Acabamos de enviarte un correo con esta información.`;
+const SUCCESS_TEXT_FORM = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera. Acabamos de enviarte un correo con esta información.`;
 
-const FULL_TEXT = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Acabamos de enviar un correo a tu bandeja de entrada para compartirte más información sobre nosotros. Te estaremos contactando al liberar espacio.`;
+const FULL_TEXT_FORM = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros. Te estaremos contactando al liberar espacio.`;
 
 function evaluate(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
   const qualifies = score1Count <= 3;
   const resultText = qualifies ? "Sí califica" : "No hay cupo (exhaustivo)";
-  const uiText = qualifies ? SUCCESS_TEXT : FULL_TEXT;
+  const uiText = qualifies ? SUCCESS_TEXT_FORM : FULL_TEXT_FORM;
   return { score1Count, qualifies, resultText, uiText };
 }
 
@@ -163,13 +163,13 @@ export default function DiagnosticoContent() {
   }, [searchParams]);
 
   const progressPct = useMemo(() => (step / 3) * 100, [step]);
+  const barWidth = progressPct + "%";
 
   const handleSelect = (qid: string, optionValue: string) => {
     const q = QUESTIONS.find(q => q.id === qid)!;
     const opt = q.options.find(o => o.value === optionValue)!;
     setAnswers(prev => ({ ...prev, [qid]: { id: qid, value: optionValue, score: (opt.score as 1|2) } }));
   };
-
   const handleExtraText = (qid: string, text: string) => {
     const existing = answers[qid];
     if (!existing) return;
@@ -225,13 +225,13 @@ export default function DiagnosticoContent() {
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
-        {/* Botones: móvil apilados, web en fila con separación */}
-        <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
+        {/* Botones: stacked en mobile, separados en desktop */}
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:gap-4">
           <a
             href="https://www.grupoinforum.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full sm:w-auto text-center px-5 py-3 rounded-2xl bg-[#082a49] text-white"
+            className="inline-block px-5 py-3 rounded-2xl bg-[#082a49] text-white text-center"
           >
             Visita nuestro website
           </a>
@@ -239,9 +239,9 @@ export default function DiagnosticoContent() {
           {resultUI.qualifies && (
             <a
               href="https://wa.me/50242170962?text=Hola%2C%20vengo%20del%20diagn%C3%B3stico"
+              className="inline-block px-5 py-3 rounded-2xl bg-blue-600 text-white text-center"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full sm:w-auto text-center px-5 py-3 rounded-2xl bg-blue-600 text-white"
             >
               Ir a WhatsApp
             </a>
@@ -258,14 +258,14 @@ export default function DiagnosticoContent() {
     <main className="max-w-3xl mx-auto p-6">
       {/* Barra de progreso */}
       <div className="w-full h-2 bg-gray-200 rounded mb-6">
-        <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: `${progressPct}%` }} />
+        <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: barWidth }} />
       </div>
 
       <h1 className="text-2xl font-semibold mb-4">Diagnóstico para Radiografía de Software de Gestión Empresarial</h1>
       <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
       {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
 
-      {/* Paso 1: Preguntas */}
+      {/* Paso 1 */}
       {step === 1 && (
         <section className="space-y-6">
           {QUESTIONS.map((q) => (
@@ -300,7 +300,7 @@ export default function DiagnosticoContent() {
             <button
               onClick={() => setStep(2)}
               disabled={!canContinueQuestions}
-              className="px-5 py-3 rounded-2xl bg-blue-600 text-white disabled:opacity-50"
+              className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50"
             >
               Siguiente
             </button>
@@ -308,7 +308,7 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 2: Datos */}
+      {/* Paso 2 */}
       {step === 2 && (
         <section className="space-y-4">
           <div>
@@ -337,7 +337,7 @@ export default function DiagnosticoContent() {
             <button
               onClick={() => setStep(3)}
               disabled={!canContinueData}
-              className="px-5 py-3 rounded-2xl bg-blue-600 text-white disabled:opacity-50"
+              className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50"
             >
               Siguiente
             </button>
@@ -345,16 +345,12 @@ export default function DiagnosticoContent() {
         </section>
       )}
 
-      {/* Paso 3: Consentimiento y envío */}
+      {/* Paso 3 */}
       {step === 3 && (
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
             <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={form.consent}
-                onChange={e => setForm({ ...form, consent: e.target.checked })}
-              />
+              <input type="checkbox" checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} />
               <span>
                 Autorizo a Grupo Inforum a contactarme respecto a esta evaluación y servicios relacionados. He leído la{" "}
                 {process.env.NEXT_PUBLIC_PRIVACY_URL ? (
@@ -365,7 +361,7 @@ export default function DiagnosticoContent() {
           </div>
           <div className="flex items-center justify-between gap-3">
             <button onClick={() => setStep(2)} className="px-5 py-3 rounded-2xl border">Atrás</button>
-            <button onClick={onSubmit} disabled={loading || !form.consent} className="px-5 py-3 rounded-2xl bg-blue-600 text-white disabled:opacity-50">
+            <button onClick={onSubmit} disabled={loading || !form.consent} className="px-5 py-3 rounded-2xl shadow bg-blue-600 text-white disabled:opacity-50">
               {loading ? "Enviando..." : "Haz clic para conocer tu resultado"}
             </button>
           </div>
