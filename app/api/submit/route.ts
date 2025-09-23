@@ -8,8 +8,9 @@ type Payload = {
   name: string;
   company?: string;
   email: string;
-  country?: string;  // etiqueta como venía del front (ej. "Honduras")
+  country?: string;
   answers?: any;
+  qualifies?: boolean;
 };
 
 const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
@@ -19,13 +20,7 @@ const BREVO_USER = process.env.BREVO_SMTP_USER;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS;
 const EMAIL_FROM = process.env.EMAIL_FROM || "Inforum <info@inforumsol.com>";
 
-/* ========= SITIO & VIDEO PARA EL CORREO ========= */
-const SITE_URL    = "https://grupoinforum.com";
-const VIDEO_ID    = "Eau96xNp3Ds";
-const VIDEO_URL   = `https://youtu.be/${VIDEO_ID}`;
-const VIDEO_IMAGE = "https://inforum-diagnostico.vercel.app/video.png"; // tu miniatura con play
-
-// Pipelines por país (IDs que ya pusiste en Vercel)
+// Pipelines por país
 const PIPELINES = {
   GT: Number(process.env.PD_PIPELINE_GT ?? 1),
   SV: Number(process.env.PD_PIPELINE_SV ?? 2),
@@ -35,7 +30,7 @@ const PIPELINES = {
   PA: Number(process.env.PD_PIPELINE_PA ?? 6),
 } as const;
 
-// Etapa “Capa 1” por país (IDs que ya pusiste en Vercel)
+// Etapas Capa 1
 const STAGE_CAPA1 = {
   GT: Number(process.env.PD_STAGE_GT_CAPA1 ?? 6),
   SV: Number(process.env.PD_STAGE_SV_CAPA1 ?? 7),
@@ -45,12 +40,11 @@ const STAGE_CAPA1 = {
   PA: Number(process.env.PD_STAGE_PA_CAPA1 ?? 31),
 } as const;
 
-// Normaliza etiqueta país -> código ISO que usamos en los mapas
+// Normaliza etiqueta país
 function countryToCode(label?: string): keyof typeof PIPELINES {
   if (!label) return "GT";
   const x = label.trim().toUpperCase();
   if (["GT", "SV", "HN", "DO", "EC", "PA"].includes(x)) return x as any;
-
   const MAP: Record<string, keyof typeof PIPELINES> = {
     "GUATEMALA": "GT",
     "EL SALVADOR": "SV",
@@ -64,6 +58,7 @@ function countryToCode(label?: string): keyof typeof PIPELINES {
   return MAP[x] ?? "GT";
 }
 
+// Helper Pipedrive
 async function pd(path: string, init?: RequestInit) {
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
@@ -72,38 +67,31 @@ async function pd(path: string, init?: RequestInit) {
   try { return JSON.parse(text); } catch { return text as any; }
 }
 
-/* ========= EMAIL: CONFIRMACIÓN CON MINIATURA CLICKEABLE ========= */
-async function sendConfirmation(data: Payload) {
-  if (!BREVO_USER || !BREVO_PASS) {
-    console.warn("Brevo SMTP no configurado. No se envía correo.");
-    return;
-  }
-  const nodemailer = await import("nodemailer");
-  const transporter = nodemailer.createTransport({
-    host: "smtp-relay.brevo.com",
-    port: 587,
-    auth: { user: BREVO_USER, pass: BREVO_PASS },
-  });
+/* ========= EMAIL ========= */
+function emailBodies(qualifies: boolean) {
+  const SITE_URL    = "https://www.grupoinforum.com";
+  const VIDEO_ID    = "Eau96xNp3Ds";
+  const VIDEO_URL   = `https://youtu.be/${VIDEO_ID}`;
+  const VIDEO_IMAGE = "https://inforum-diagnostico.vercel.app/video.png";
 
-  // Texto plano (fallback)
-  const text =
-`¡Gracias por completar tu diagnóstico!
+  const subject = qualifies
+    ? "Tu diagnóstico califica – Grupo Inforum"
+    : "Gracias por tu diagnóstico – Grupo Inforum";
 
-Hemos recibido tus datos correctamente.
-Rita Muralles de nuestro equipo se estará comunicando pronto contigo para darte seguimiento.
+  const lead = qualifies
+    ? "¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera."
+    : "¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Te estaremos contactando al liberar espacio. Por lo pronto te invitamos a conocer más de Inforum.";
+
+  const text = `
+${lead}
 
 Mira el video: ${VIDEO_URL}
 Visita nuestro website: ${SITE_URL}
+`.trim();
 
-— Grupo Inforum`.trim();
-
-  // HTML con imagen clickeable + CTA (un solo CTA, sin repetir link abajo)
   const html = `
 <div style="font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;line-height:1.55;color:#111">
-  <p style="margin:0 0 14px">
-    ¡Gracias por completar tu diagnóstico! Hemos recibido tus datos correctamente.
-    Rita Muralles de nuestro equipo se estará comunicando pronto contigo para darte seguimiento.
-  </p>
+  <p style="margin:0 0 14px">${lead}</p>
 
   <a href="${VIDEO_URL}" target="_blank" rel="noopener"
      style="text-decoration:none;border:0;display:inline-block;margin:6px 0 18px">
@@ -124,16 +112,33 @@ Visita nuestro website: ${SITE_URL}
 </div>
 `.trim();
 
+  return { subject, text, html };
+}
+
+async function sendConfirmationEmail(toEmail: string, qualifies: boolean) {
+  if (!BREVO_USER || !BREVO_PASS) {
+    console.warn("Brevo SMTP no configurado.");
+    return;
+  }
+  const nodemailer = await import("nodemailer");
+  const transporter = nodemailer.createTransport({
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    auth: { user: BREVO_USER, pass: BREVO_PASS },
+  });
+
+  const { subject, text, html } = emailBodies(qualifies);
   await transporter.sendMail({
     from: EMAIL_FROM,
-    to: data.email,
-    subject: "Gracias por tu diagnóstico – Grupo Inforum",
+    to: toEmail,
+    subject,
     text,
     html,
   });
-  console.log(`✅ Correo enviado a: ${data.email}`);
+  console.log(`✅ Correo enviado a ${toEmail}`);
 }
 
+/* ========= HANDLER ========= */
 export async function POST(req: Request) {
   try {
     const data = (await req.json()) as Payload;
@@ -145,15 +150,13 @@ export async function POST(req: Request) {
     const pipeline_id = PIPELINES[cc];
     const stage_id = STAGE_CAPA1[cc];
 
-    // 1) Persona (buscar por email o crear)
+    // 1) Persona
     let personId: number | null = null;
     try {
       const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
       const item = (search as any)?.data?.items?.[0];
       if (item?.item?.id) personId = item.item.id;
-    } catch (e) {
-      console.error("[persons/search]", (e as Error).message);
-    }
+    } catch {}
     if (!personId) {
       const created = await pd(`/persons`, {
         method: "POST",
@@ -166,7 +169,7 @@ export async function POST(req: Request) {
       personId = (created as any)?.data?.id;
     }
 
-    // 2) Organización opcional
+    // 2) Organización
     let orgId: number | undefined;
     if (data.company) {
       try {
@@ -182,14 +185,12 @@ export async function POST(req: Request) {
             body: JSON.stringify({ name: data.company }),
           });
           orgId = (o as any)?.data?.id;
-        } catch (e) {
-          console.error("[organizations POST]", (e as Error).message);
-        }
+        } catch {}
       }
     }
 
-    // 3) DEAL en Capa 1 del pipeline correcto (NO /leads)
-    console.log(`[Deals] Creando deal → cc=${cc} pipeline=${pipeline_id} stage=${stage_id}`);
+    // 3) Deal
+    console.log(`[Deals] cc=${cc} → pipeline=${pipeline_id}, stage=${stage_id}`);
     const deal = await pd(`/deals`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -198,15 +199,15 @@ export async function POST(req: Request) {
         person_id: personId!,
         org_id: orgId,
         pipeline_id,
-        stage_id,          // Capa 1
+        stage_id,
         value: 0,
-        currency: "GTQ",   // cámbialo si quieres por país
+        currency: "GTQ",
       }),
     });
     const dealId = (deal as any)?.data?.id;
-    console.log(`🟢 Deal creado #${dealId} en pipeline ${pipeline_id}, stage ${stage_id}`);
+    console.log(`🟢 Deal creado #${dealId}`);
 
-    // 4) Nota con contexto
+    // 4) Nota
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -224,12 +225,12 @@ export async function POST(req: Request) {
       console.error("[notes POST]", (e as Error).message);
     }
 
-    // 5) Confirmación por correo (con miniatura clickeable)
-    try { await sendConfirmation(data); } catch (e) { console.error("[email]", (e as Error).message); }
+    // 5) Email
+    await sendConfirmationEmail(data.email, !!data.qualifies);
 
-    return NextResponse.json({ ok: true, message: "Deal creado en Capa 1 y correo enviado" });
+    return NextResponse.json({ ok: true, message: "Deal creado + correo enviado" });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
-    return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || "Error interno" }, { status: 500 });
   }
 }
