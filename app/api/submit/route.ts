@@ -10,6 +10,7 @@ type Payload = {
   company?: string;
   email: string;
   country?: string;        // etiqueta legible (ej: Guatemala)
+  phone?: string;          // <-- NUEVO: "+502 55555555"
   answers?: any;
   score1Count?: number;
   qualifies?: boolean;     // viene del front
@@ -155,6 +156,67 @@ async function sendEmailConfirmation(data: Payload, req: Request) {
   console.log(`✅ Email enviado a ${data.email}`);
 }
 
+/* ========= Persona en Pipedrive (crear/actualizar con phone) ========= */
+async function upsertPersonWithPhone(data: Payload) {
+  const email = data.email;
+  const phone = data.phone?.trim(); // viene como "+502 55555555" (front ya lo formatea)
+
+  // 1) Buscar por email
+  let personId: number | null = null;
+  try {
+    const search = await pd(`/persons/search?term=${encodeURIComponent(email)}&fields=email&exact_match=true`);
+    const item = (search as any)?.data?.items?.[0];
+    if (item?.item?.id) personId = item.item.id;
+  } catch (e) {
+    console.error("[persons/search]", (e as Error).message);
+  }
+
+  // 2) Si existe → actualizar (opcional: actualizar nombre/phone)
+  if (personId) {
+    if (phone) {
+      try {
+        await pd(`/persons/${personId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: data.name,
+            phone: [{ value: phone, primary: true, label: "work" }],
+          }),
+        });
+      } catch (e) {
+        console.error("[persons PUT phone]", (e as Error).message);
+      }
+    } else {
+      // Si no hay phone, al menos asegura el name actualizado
+      try {
+        await pd(`/persons/${personId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: data.name }),
+        });
+      } catch {}
+    }
+    return personId;
+  }
+
+  // 3) Si no existe → crear con email y (si hay) teléfono
+  try {
+    const created = await pd(`/persons`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: data.name,
+        email: [{ value: email, primary: true, label: "work" }],
+        phone: phone ? [{ value: phone, primary: true, label: "work" }] : undefined,
+      }),
+    });
+    return (created as any)?.data?.id as number | null;
+  } catch (e) {
+    console.error("[persons POST]", (e as Error).message);
+    return null;
+  }
+}
+
 /* ========= API ========= */
 export async function POST(req: Request) {
   try {
@@ -168,26 +230,8 @@ export async function POST(req: Request) {
     const pipeline_id = PIPELINES[cc];
     const stage_id = STAGE_CAPA1[cc];
 
-    // 1) Persona (buscar por email o crear)
-    let personId: number | null = null;
-    try {
-      const search = await pd(`/persons/search?term=${encodeURIComponent(data.email)}&fields=email&exact_match=true`);
-      const item = (search as any)?.data?.items?.[0];
-      if (item?.item?.id) personId = item.item.id;
-    } catch (e) {
-      console.error("[persons/search]", (e as Error).message);
-    }
-    if (!personId) {
-      const created = await pd(`/persons`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: data.name,
-          email: [{ value: data.email, primary: true, label: "work" }],
-        }),
-      });
-      personId = (created as any)?.data?.id;
-    }
+    // 1) Persona (buscar o crear) con teléfono si viene
+    const personId = await upsertPersonWithPhone(data);
 
     // 2) Organización (opcional)
     let orgId: number | undefined;
@@ -229,7 +273,7 @@ export async function POST(req: Request) {
     const dealId = (deal as any)?.data?.id;
     console.log(`🟢 Deal #${dealId} creado en pipeline ${pipeline_id}, stage ${stage_id}`);
 
-    // 4) Nota con contexto (incluye calificación y texto de evaluación)
+    // 4) Nota con contexto (incluye teléfono y evaluación)
     try {
       const content =
         `Formulario diagnóstico\n` +
@@ -237,6 +281,7 @@ export async function POST(req: Request) {
         (data.company ? `• Empresa: ${data.company}\n` : "") +
         `• Email: ${data.email}\n` +
         (data.country ? `• País: ${data.country}\n` : "") +
+        (data.phone ? `• Teléfono: ${data.phone}\n` : "") + // <-- agregado
         (typeof data.qualifies !== "undefined"
           ? `• Resultado: ${data.qualifies ? "✅ Sí califica" : "❌ No califica"}\n`
           : "") +
@@ -260,7 +305,7 @@ export async function POST(req: Request) {
     // 5) Email (no bloqueante)
     try { await sendEmailConfirmation(data, req); } catch (e) { console.error("[email]", (e as Error).message); }
 
-    return NextResponse.json({ ok: true, message: "Deal creado, nota agregada y correo enviado" });
+    return NextResponse.json({ ok: true, message: "Deal creado, persona actualizada, nota agregada y correo enviado" });
   } catch (e: any) {
     console.error("[/api/submit] Error:", e?.message || e);
     return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
