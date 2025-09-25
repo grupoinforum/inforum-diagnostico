@@ -91,6 +91,9 @@ const QUESTIONS = [
 
 type Answer = { id: string; value: string; score: 1 | 2; extraText?: string };
 
+/* =========================
+   PAÍSES / PREFIJOS / REGLAS
+   ========================= */
 const COUNTRIES = [
   { value: "GT", label: "Guatemala" },
   { value: "SV", label: "El Salvador" },
@@ -102,6 +105,33 @@ const COUNTRIES = [
 
 type CountryValue = typeof COUNTRIES[number]["value"];
 
+const COUNTRY_PREFIX: Record<CountryValue, string> = {
+  GT: "+502",
+  SV: "+503",
+  HN: "+504",
+  PA: "+507",
+  DO: "+1",    // RD usa +1 (NANP)
+  EC: "+593",
+};
+
+// Reglas de dígitos locales (sin prefijo):
+// GT/SV/HN/PA: 8 dígitos
+// DO: 10 dígitos (3 de área + 7 número) por NANP
+// EC: 9 dígitos (móvil típico)
+const COUNTRY_PHONE_RULES: Record<CountryValue, { min: number; max?: number; note?: string }> = {
+  GT: { min: 8 },
+  SV: { min: 8 },
+  HN: { min: 8 },
+  PA: { min: 8 },
+  DO: { min: 10 },
+  EC: { min: 9, note: "Usa tu número móvil (9 dígitos)" },
+};
+
+const DEFAULT_PREFIX = "+502";
+
+/* =========================
+   EMAIL corporativo simple
+   ========================= */
 const FREE_EMAIL_DOMAINS = [
   "gmail.com","hotmail.com","outlook.com","yahoo.com","icloud.com","proton.me","aol.com","live.com","msn.com"
 ];
@@ -113,7 +143,7 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   EVALUACIÓN (≤3 con score=1 ⇒ califica)
+   EVALUACIÓN
    ========================= */
 const SUCCESS_TEXT_FORM = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera. Acabamos de enviarte un correo con esta información.`;
 
@@ -150,7 +180,8 @@ export default function DiagnosticoContent() {
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
   const [form, setForm] = useState<{
     name: string; company: string; email: string; country: CountryValue; consent: boolean;
-  }>({ name: "", company: "", email: "", country: "GT", consent: false });
+    phoneLocal: string; // parte local SIN prefijo
+  }>({ name: "", company: "", email: "", country: "GT", consent: false, phoneLocal: "" });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resultUI, setResultUI] = useState<null | { qualifies: boolean; title: string; message: string }>(null);
@@ -178,8 +209,44 @@ export default function DiagnosticoContent() {
 
   const canContinueQuestions = useMemo(() => QUESTIONS.every(q => !!answers[q.id]), [answers]);
 
+  /* =========================
+     TELÉFONO con prefijo y reglas
+     ========================= */
+  const selectedPrefix = useMemo(
+    () => COUNTRY_PREFIX[form.country] ?? DEFAULT_PREFIX,
+    [form.country]
+  );
+
+  const phoneFull = useMemo(() => {
+    const local = (form.phoneLocal || "").replace(/[^\d]/g, "");
+    return `${selectedPrefix}${local ? " " + local : ""}`;
+  }, [form.phoneLocal, selectedPrefix]);
+
+  const isPhoneValid = (local: string, country: CountryValue) => {
+    const digits = (local || "").replace(/[^\d]/g, "");
+    const rule = COUNTRY_PHONE_RULES[country];
+    if (!rule) return digits.length >= 8; // fallback
+    const meetsMin = digits.length >= rule.min;
+    const meetsMax = rule.max ? digits.length <= rule.max : true;
+    return meetsMin && meetsMax;
+  };
+
+  const phoneRequirementText = (() => {
+    const rule = COUNTRY_PHONE_RULES[form.country];
+    if (!rule) return "Ingresa al menos 8 dígitos del número local.";
+    const minTxt = `${rule.min} dígitos`;
+    const maxTxt = rule.max ? ` (máx. ${rule.max})` : "";
+    const note = rule.note ? ` · ${rule.note}` : "";
+    return `Ingresa ${minTxt}${maxTxt} del número local${note}.`;
+  })();
+
   const canContinueData = useMemo(
-    () => form.name.trim().length > 1 && form.company.trim().length > 1 && /.+@.+\..+/.test(form.email) && isCorporateEmail(form.email),
+    () =>
+      form.name.trim().length > 1 &&
+      form.company.trim().length > 1 &&
+      /.+@.+\..+/.test(form.email) &&
+      isCorporateEmail(form.email) &&
+      isPhoneValid(form.phoneLocal, form.country),
     [form]
   );
 
@@ -198,6 +265,7 @@ export default function DiagnosticoContent() {
         company: form.company,
         email: form.email,
         country: countryLabel, // el backend mapea LABEL → pipeline
+        phone: phoneFull,      // enviamos el teléfono con prefijo
         answers: { utms, items: finalAnswers },
         score1Count,
         qualifies,
@@ -225,7 +293,6 @@ export default function DiagnosticoContent() {
         <h1 className="text-2xl font-semibold mb-3">{resultUI.title}</h1>
         <p className="whitespace-pre-line text-gray-800 leading-relaxed">{resultUI.message}</p>
 
-        {/* Botones: stacked en mobile, separados en desktop */}
         <div className="mt-4 flex flex-col gap-3 md:flex-row md:gap-4">
           <a
             href="https://www.grupoinforum.com"
@@ -313,25 +380,75 @@ export default function DiagnosticoContent() {
         <section className="space-y-4">
           <div>
             <label className="block mb-1">Nombre</label>
-            <input className="w-full border rounded-xl px-3 py-2" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+            />
           </div>
           <div>
             <label className="block mb-1">Empresa</label>
-            <input className="w-full border rounded-xl px-3 py-2" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} />
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.company}
+              onChange={e => setForm({ ...form, company: e.target.value })}
+            />
           </div>
           <div>
             <label className="block mb-1">Correo empresarial</label>
-            <input className="w-full border rounded-xl px-3 py-2" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.email}
+              onChange={e => setForm({ ...form, email: e.target.value })}
+            />
             {form.email && !isCorporateEmail(form.email) && (
-              <p className="text-sm text-red-600 mt-1">Usa un correo corporativo (no gmail/hotmail/outlook/yahoo, etc.).</p>
+              <p className="text-sm text-red-600 mt-1">
+                Usa un correo corporativo (no gmail/hotmail/outlook/yahoo, etc.).
+              </p>
             )}
           </div>
+
+          {/* País */}
           <div>
             <label className="block mb-1">País</label>
-            <select className="w-full border rounded-xl px-3 py-2" value={form.country} onChange={e => setForm({ ...form, country: e.target.value as CountryValue })}>
+            <select
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.country}
+              onChange={e => setForm({ ...form, country: e.target.value as CountryValue })}
+            >
               {COUNTRIES.map(c => (<option key={c.value} value={c.value}>{c.label}</option>))}
             </select>
           </div>
+
+          {/* Teléfono con prefijo automático */}
+          <div>
+            <label className="block mb-1">Teléfono</label>
+            <div className="flex">
+              <span className="inline-flex items-center rounded-l border border-r-0 bg-gray-50 px-3 text-sm">
+                {selectedPrefix}
+              </span>
+              <input
+                className="w-full rounded-r border px-3 py-2"
+                value={form.phoneLocal}
+                onChange={e =>
+                  setForm({ ...form, phoneLocal: e.target.value.replace(/[^\d]/g, "") })
+                }
+                placeholder="Ingresa tu número (solo dígitos)"
+                inputMode="numeric"
+                pattern="\d*"
+              />
+            </div>
+
+            {/* Mensaje dinámico por país */}
+            {!isPhoneValid(form.phoneLocal, form.country) && form.phoneLocal.length > 0 ? (
+              <p className="text-xs text-red-600 mt-1">{phoneRequirementText}</p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-1">
+                Se enviará como: <strong>{phoneFull || selectedPrefix}</strong>
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center justify-between gap-3 pt-2">
             <button onClick={() => setStep(1)} className="px-5 py-3 rounded-2xl border">Atrás</button>
             <button
@@ -350,7 +467,11 @@ export default function DiagnosticoContent() {
         <section className="space-y-4">
           <div className="p-4 rounded-2xl border border-gray-200">
             <label className="flex items-start gap-3">
-              <input type="checkbox" checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={form.consent}
+                onChange={e => setForm({ ...form, consent: e.target.checked })}
+              />
               <span>
                 Autorizo a Grupo Inforum a contactarme respecto a esta evaluación y servicios relacionados. He leído la{" "}
                 {process.env.NEXT_PUBLIC_PRIVACY_URL ? (
