@@ -11,6 +11,20 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
+      <head>
+        {/* Google tag (gtag.js) */}
+        <script async src="https://www.googletagmanager.com/gtag/js?id=AW-385774897"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'AW-385774897');
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-white text-gray-900 antialiased flex flex-col">
         {/* HEADER full-width con cintillo azul */}
         <header className="w-full bg-[#082a49]">
