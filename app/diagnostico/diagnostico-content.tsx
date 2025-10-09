@@ -94,11 +94,10 @@ const COUNTRY_PREFIX: Record<CountryValue, string> = {
   SV: "+503",
   HN: "+504",
   PA: "+507",
-  DO: "+1", // RD usa +1 (NANP)
+  DO: "+1",
   EC: "+593",
 };
 
-// Reglas de dígitos locales (sin prefijo)
 const COUNTRY_PHONE_RULES: Record<CountryValue, { min: number; max?: number; note?: string }> = {
   GT: { min: 8 },
   SV: { min: 8 },
@@ -133,9 +132,6 @@ const FULL_TEXT_FORM = `¡Gracias por llenar el cuestionario! Por el momento nue
 /* =========================
    EVALUACIÓN (regla actualizada)
    ========================= */
-// - Si tiene >3 con score 1 ⇒ NO califica.
-// - Si tiene >3 con score 2 ⇒ SÍ califica.
-// - En los demás casos ⇒ NO califica.
 function evaluate(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
   const score2Count = finalAnswers.filter(a => a.score === 2).length;
@@ -176,9 +172,22 @@ export default function DiagnosticoContent() {
   const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState<Record<string, Answer | undefined>>({});
   const [form, setForm] = useState<{
-    name: string; company: string; email: string; country: CountryValue; consent: boolean;
+    name: string;
+    company: string;
+    role: string;             // <-- NUEVO campo: Cargo en la empresa
+    email: string;
+    country: CountryValue;
+    consent: boolean;
     phoneLocal: string; // parte local SIN prefijo
-  }>({ name: "", company: "", email: "", country: "GT", consent: false, phoneLocal: "" });
+  }>({
+    name: "",
+    company: "",
+    role: "",                 // <-- inicializado
+    email: "",
+    country: "GT",
+    consent: false,
+    phoneLocal: ""
+  });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resultUI, setResultUI] = useState<null | { qualifies: boolean; title: string; message: string }>(null);
@@ -205,7 +214,6 @@ export default function DiagnosticoContent() {
     setAnswers(prev => ({ ...prev, [qid]: { ...existing, extraText: text } }));
   };
 
-  // Mostrar campo libre SOLO si la opción seleccionada de esa pregunta tiene requiresText=true
   const shouldShowExtraInput = (qid: string) => {
     const q = QUESTIONS.find(qq => qq.id === qid);
     if (!q) return false;
@@ -251,6 +259,7 @@ export default function DiagnosticoContent() {
     () =>
       form.name.trim().length > 1 &&
       form.company.trim().length > 1 &&
+      form.role.trim().length > 1 &&      // <-- obligatorio
       /.+@.+\..+/.test(form.email) &&
       isCorporateEmail(form.email) &&
       isPhoneValid(form.phoneLocal, form.country),
@@ -270,9 +279,10 @@ export default function DiagnosticoContent() {
       await submitDiagnostico({
         name: form.name,
         company: form.company,
+        role: form.role,           // <-- enviar cargo al backend
         email: form.email,
-        country: countryLabel, // el backend mapea LABEL → pipeline
-        phone: phoneFull,      // enviamos el teléfono con prefijo
+        country: countryLabel,
+        phone: phoneFull,
         answers: { utms, items: finalAnswers },
         score1Count,
         qualifies,
@@ -403,6 +413,18 @@ export default function DiagnosticoContent() {
               onChange={e => setForm({ ...form, company: e.target.value })}
             />
           </div>
+
+          {/* NUEVO: Cargo en la empresa (obligatorio) */}
+          <div>
+            <label className="block mb-1">Cargo en la empresa</label>
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.role}
+              onChange={e => setForm({ ...form, role: e.target.value })}
+              placeholder="Ej.: Gerente de TI"
+            />
+          </div>
+
           <div>
             <label className="block mb-1">Correo empresarial</label>
             <input
@@ -448,7 +470,6 @@ export default function DiagnosticoContent() {
               />
             </div>
 
-            {/* Mensaje dinámico por país */}
             {!isPhoneValid(form.phoneLocal, form.country) && form.phoneLocal.length > 0 ? (
               <p className="text-xs text-red-600 mt-1">{phoneRequirementText}</p>
             ) : (
