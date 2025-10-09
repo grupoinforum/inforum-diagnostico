@@ -2,6 +2,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Image from "next/image";
+import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "Inforum · Diagnóstico",
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
+
       <body className="min-h-screen bg-white text-gray-900 antialiased flex flex-col">
         {/* HEADER full-width con cintillo azul */}
         <header className="w-full bg-[#082a49]">
@@ -67,6 +69,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             />
           </div>
         </footer>
+
+        {/* === Microsoft Clarity === */}
+        <Script id="clarity" strategy="afterInteractive">
+          {`
+            (function(c,l,a,r,i,t,y){
+              c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+              t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+              y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+            })(window, document, "clarity", "script", "tnlhp2hkhd");
+          `}
+        </Script>
       </body>
     </html>
   );
