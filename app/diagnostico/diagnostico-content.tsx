@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 /* =========================
-   PREGUNTAS (5)
+   PREGUNTAS (5) – ORDEN ACTUALIZADO
    ========================= */
 const QUESTIONS = [
   {
@@ -37,6 +37,20 @@ const QUESTIONS = [
     required: true,
   },
   {
+    id: "busca",
+    label: "¿Estás buscando un software o servicio en particular para tu empresa?",
+    type: "single" as const,
+    options: [
+      { value: "nomina_planilla", label: "Sistema Nómina y Planilla", score: 2 },
+      { value: "crm", label: "Sistema CRM", score: 1 },
+      { value: "nube", label: "Servicio de Nube", score: 2 },
+      { value: "consultoria", label: "Consultoría y/o Capacitaciones", score: 2 },
+      { value: "facturacion", label: "Facturación Electrónica", score: 2 },
+      { value: "otros", label: "Otros (especificar)", score: 2, requiresText: true },
+    ],
+    required: true,
+  },
+  {
     id: "personas",
     label: "¿Cuántas personas dependen del sistema para su trabajo diario?",
     type: "single" as const,
@@ -54,20 +68,6 @@ const QUESTIONS = [
       { value: "1-3", label: "1-3 (insatisfecho)", score: 2 },
       { value: "4-6", label: "4-6 (puede mejorar)", score: 2 },
       { value: "7-10", label: "7-10 (cumple)", score: 1 },
-    ],
-    required: true,
-  },
-  {
-    id: "busca",
-    label: "¿Estas buscando un software o servicio en particular para tu empresa?",
-    type: "single" as const,
-    options: [
-      { value: "nomina_planilla", label: "Sistema Nómina y Planilla", score: 2 },
-      { value: "crm", label: "Sistema CRM", score: 1 },
-      { value: "nube", label: "Servicio de Nube", score: 2 },
-      { value: "consultoria", label: "Consultoría y/o Capacitaciones", score: 2 },
-      { value: "facturacion", label: "Facturación Electrónica", score: 2 },
-      { value: "otros", label: "Otros (especificar)", score: 2, requiresText: true },
     ],
     required: true,
   },
@@ -98,10 +98,7 @@ const COUNTRY_PREFIX: Record<CountryValue, string> = {
   EC: "+593",
 };
 
-// Reglas de dígitos locales (sin prefijo):
-// GT/SV/HN/PA: 8 dígitos
-// DO: 10 dígitos (3 de área + 7 número) por NANP
-// EC: 9 dígitos (móvil típico)
+// Reglas de dígitos locales (sin prefijo)
 const COUNTRY_PHONE_RULES: Record<CountryValue, { min: number; max?: number; note?: string }> = {
   GT: { min: 8 },
   SV: { min: 8 },
@@ -136,7 +133,6 @@ const FULL_TEXT_FORM = `¡Gracias por llenar el cuestionario! Por el momento nue
 /* =========================
    EVALUACIÓN (regla actualizada)
    ========================= */
-// Regla nueva solicitada:
 // - Si tiene >3 con score 1 ⇒ NO califica.
 // - Si tiene >3 con score 2 ⇒ SÍ califica.
 // - En los demás casos ⇒ NO califica.
@@ -207,6 +203,15 @@ export default function DiagnosticoContent() {
     const existing = answers[qid];
     if (!existing) return;
     setAnswers(prev => ({ ...prev, [qid]: { ...existing, extraText: text } }));
+  };
+
+  // Mostrar campo libre SOLO si la opción seleccionada de esa pregunta tiene requiresText=true
+  const shouldShowExtraInput = (qid: string) => {
+    const q = QUESTIONS.find(qq => qq.id === qid);
+    if (!q) return false;
+    const selected = answers[qid]?.value;
+    const selectedOpt = q.options.find(o => o.value === selected) as any;
+    return !!selectedOpt?.requiresText;
   };
 
   const canContinueQuestions = useMemo(() => QUESTIONS.every(q => !!answers[q.id]), [answers]);
@@ -355,18 +360,12 @@ export default function DiagnosticoContent() {
                   </div>
                 ))}
               </div>
-              {q.options.some(o => (o as any).requiresText) && answers[q.id]?.value?.includes("otro") && (
+
+              {/* Campo libre solo si la opción seleccionada lo requiere */}
+              {shouldShowExtraInput(q.id) && (
                 <input
                   type="text"
                   placeholder="Especifica aquí"
-                  className="mt-3 w-full border rounded-xl px-3 py-2"
-                  onChange={(e) => handleExtraText(q.id, e.target.value)}
-                />
-              )}
-              {q.id === "busca" && answers[q.id]?.value === "otros" && (
-                <input
-                  type="text"
-                  placeholder="Cuéntanos qué necesitas"
                   className="mt-3 w-full border rounded-xl px-3 py-2"
                   onChange={(e) => handleExtraText(q.id, e.target.value)}
                 />
