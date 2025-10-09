@@ -5,13 +5,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 
 /* ========= Tipos ========= */
+type Answer = { id: string; value: string; score: 1 | 2; extraText?: string };
 type Payload = {
   name: string;
   company?: string;
   email: string;
   country?: string;        // etiqueta legible (ej: Guatemala)
-  phone?: string;          // <-- NUEVO: "+502 55555555"
-  answers?: any;
+  phone?: string;          // "+502 55555555"
+  answers?: { utms?: Record<string, string>; items?: Answer[] } | any;
   score1Count?: number;
   qualifies?: boolean;     // viene del front
   resultText?: string;     // “Sí califica” | “No hay cupo (exhaustivo)”
@@ -86,7 +87,7 @@ function absoluteOriginFromReq(req: Request) {
 /* ========= Email (Brevo + Nodemailer) ========= */
 const VIDEO_ID = "Eau96xNp3Ds";
 const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
-// usamos /video.png subida en /public como thumbnail con botón rojo ya “horneado”
+// usamos /video.png en /public como thumbnail con botón ya “horneado”
 
 function buildEmailBodies(data: Payload, origin: string) {
   const qualifies = !!data.qualifies;
@@ -159,7 +160,7 @@ async function sendEmailConfirmation(data: Payload, req: Request) {
 /* ========= Persona en Pipedrive (crear/actualizar con phone) ========= */
 async function upsertPersonWithPhone(data: Payload) {
   const email = data.email;
-  const phone = data.phone?.trim(); // viene como "+502 55555555" (front ya lo formatea)
+  const phone = data.phone?.trim(); // "+502 55555555"
 
   // 1) Buscar por email
   let personId: number | null = null;
@@ -171,30 +172,19 @@ async function upsertPersonWithPhone(data: Payload) {
     console.error("[persons/search]", (e as Error).message);
   }
 
-  // 2) Si existe → actualizar (opcional: actualizar nombre/phone)
+  // 2) Si existe → actualizar
   if (personId) {
-    if (phone) {
-      try {
-        await pd(`/persons/${personId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: data.name,
-            phone: [{ value: phone, primary: true, label: "work" }],
-          }),
-        });
-      } catch (e) {
-        console.error("[persons PUT phone]", (e as Error).message);
-      }
-    } else {
-      // Si no hay phone, al menos asegura el name actualizado
-      try {
-        await pd(`/persons/${personId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: data.name }),
-        });
-      } catch {}
+    try {
+      await pd(`/persons/${personId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          phone: phone ? [{ value: phone, primary: true, label: "work" }] : undefined,
+        }),
+      });
+    } catch (e) {
+      console.error("[persons PUT]", (e as Error).message);
     }
     return personId;
   }
@@ -214,6 +204,29 @@ async function upsertPersonWithPhone(data: Payload) {
   } catch (e) {
     console.error("[persons POST]", (e as Error).message);
     return null;
+  }
+}
+
+/* ========= Util: formatear breve resumen de respuestas ========= */
+function briefAnswersSummary(answers?: Payload["answers"]) {
+  try {
+    const items: Answer[] | undefined = answers?.items;
+    if (!Array.isArray(items) || !items.length) return "";
+    const mapLabel: Record<string, string> = {
+      industria: "Industria",
+      erp: "ERP",
+      personas: "Personas",
+      satisfaccion: "Satisfacción",
+      busca: "Búsqueda",
+    };
+    const lines = items.map((a) => {
+      const k = mapLabel[a.id] || a.id;
+      const extra = a.extraText ? ` (${a.extraText})` : "";
+      return `- ${k}: ${a.value}${extra} [score=${a.score}]`;
+    });
+    return lines.join("\n");
+  } catch {
+    return "";
   }
 }
 
@@ -267,7 +280,7 @@ export async function POST(req: Request) {
         pipeline_id,
         stage_id,
         value: 0,
-        currency: "GTQ", // cambia si quieres por país
+        currency: "GTQ", // ajusta si quieres por país
       }),
     });
     const dealId = (deal as any)?.data?.id;
@@ -275,13 +288,23 @@ export async function POST(req: Request) {
 
     // 4) Nota con contexto (incluye teléfono y evaluación)
     try {
+      // opcional: derivar score2Count si viene el arreglo de respuestas
+      let score2Count: number | undefined;
+      try {
+        if (Array.isArray(data.answers?.items)) {
+          score2Count = (data.answers.items as Answer[]).filter((a) => a.score === 2).length;
+        }
+      } catch {}
+
+      const answersBrief = briefAnswersSummary(data.answers);
+
       const content =
         `Formulario diagnóstico\n` +
         `• Nombre: ${data.name}\n` +
         (data.company ? `• Empresa: ${data.company}\n` : "") +
         `• Email: ${data.email}\n` +
         (data.country ? `• País: ${data.country}\n` : "") +
-        (data.phone ? `• Teléfono: ${data.phone}\n` : "") + // <-- agregado
+        (data.phone ? `• Teléfono: ${data.phone}\n` : "") +
         (typeof data.qualifies !== "undefined"
           ? `• Resultado: ${data.qualifies ? "✅ Sí califica" : "❌ No califica"}\n`
           : "") +
@@ -291,7 +314,11 @@ export async function POST(req: Request) {
         (typeof data.score1Count !== "undefined"
           ? `• # de respuestas score=1: ${data.score1Count}\n`
           : "") +
-        (data.answers ? `\nRespuestas:\n${JSON.stringify(data.answers, null, 2)}` : "");
+        (typeof score2Count !== "undefined"
+          ? `• # de respuestas score=2: ${score2Count}\n`
+          : "") +
+        (answersBrief ? `\nResumen:\n${answersBrief}\n` : "") +
+        (data.answers ? `\nRespuestas (JSON):\n${JSON.stringify(data.answers, null, 2)}` : "");
 
       await pd(`/notes`, {
         method: "POST",
