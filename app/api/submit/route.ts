@@ -9,18 +9,20 @@ type Answer = { id: string; value: string; score: 1 | 2; extraText?: string };
 type Payload = {
   name: string;
   company?: string;
+  role?: string;           // <-- NUEVO: Cargo en la empresa
   email: string;
-  country?: string;        // etiqueta legible (ej: Guatemala)
-  phone?: string;          // "+502 55555555"
+  country?: string;
+  phone?: string;
   answers?: { utms?: Record<string, string>; items?: Answer[] } | any;
   score1Count?: number;
-  qualifies?: boolean;     // viene del front
-  resultText?: string;     // “Sí califica” | “No hay cupo (exhaustivo)”
+  qualifies?: boolean;
+  resultText?: string;
 };
 
 /* ========= Env ========= */
 const PD_DOMAIN = process.env.PIPEDRIVE_DOMAIN!;
 const PD_API = process.env.PIPEDRIVE_API_KEY!;
+const PD_PERSON_ROLE_FIELD = process.env.PD_PERSON_ROLE_FIELD; // <-- opcional, key del campo custom
 
 const BREVO_USER = process.env.BREVO_SMTP_USER;
 const BREVO_PASS = process.env.BREVO_SMTP_PASS;
@@ -47,8 +49,6 @@ const STAGE_CAPA1 = {
 } as const;
 
 /* ========= Helpers ========= */
-
-// Mapear etiqueta país -> código de nuestro mapa de pipelines
 function countryToCode(label?: string): keyof typeof PIPELINES {
   if (!label) return "GT";
   const x = label.trim().toUpperCase();
@@ -67,7 +67,6 @@ function countryToCode(label?: string): keyof typeof PIPELINES {
   return MAP[x] ?? "GT";
 }
 
-// Pipedrive fetch wrapper
 async function pd(path: string, init?: RequestInit) {
   const url = `https://${PD_DOMAIN}.pipedrive.com/api/v1${path}${path.includes("?") ? "&" : "?"}api_token=${PD_API}`;
   const res = await fetch(url, init);
@@ -76,7 +75,6 @@ async function pd(path: string, init?: RequestInit) {
   try { return JSON.parse(text); } catch { return text as any; }
 }
 
-// Host absoluto para links de imagen en email
 function absoluteOriginFromReq(req: Request) {
   const proto = (req.headers.get("x-forwarded-proto") || "https").split(",")[0].trim();
   const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim();
@@ -87,7 +85,6 @@ function absoluteOriginFromReq(req: Request) {
 /* ========= Email (Brevo + Nodemailer) ========= */
 const VIDEO_ID = "Eau96xNp3Ds";
 const VIDEO_URL = `https://youtu.be/${VIDEO_ID}`;
-// usamos /video.png en /public como thumbnail con botón ya “horneado”
 
 function buildEmailBodies(data: Payload, origin: string) {
   const qualifies = !!data.qualifies;
@@ -157,10 +154,11 @@ async function sendEmailConfirmation(data: Payload, req: Request) {
   console.log(`✅ Email enviado a ${data.email}`);
 }
 
-/* ========= Persona en Pipedrive (crear/actualizar con phone) ========= */
-async function upsertPersonWithPhone(data: Payload) {
+/* ========= Persona en Pipedrive (crear/actualizar con phone + role) ========= */
+async function upsertPersonWithPhoneAndRole(data: Payload) {
   const email = data.email;
-  const phone = data.phone?.trim(); // "+502 55555555"
+  const phone = data.phone?.trim();
+  const role = (data.role || "").trim();
 
   // 1) Buscar por email
   let personId: number | null = null;
@@ -172,16 +170,22 @@ async function upsertPersonWithPhone(data: Payload) {
     console.error("[persons/search]", (e as Error).message);
   }
 
+  // Helper: construir cuerpo con campos opcionales
+  const buildBody = () => {
+    const body: any = { name: data.name };
+    if (phone) body.phone = [{ value: phone, primary: true, label: "work" }];
+    // Guardar cargo en campo custom si está configurado
+    if (PD_PERSON_ROLE_FIELD && role) body[PD_PERSON_ROLE_FIELD] = role;
+    return body;
+  };
+
   // 2) Si existe → actualizar
   if (personId) {
     try {
       await pd(`/persons/${personId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: data.name,
-          phone: phone ? [{ value: phone, primary: true, label: "work" }] : undefined,
-        }),
+        body: JSON.stringify(buildBody()),
       });
     } catch (e) {
       console.error("[persons PUT]", (e as Error).message);
@@ -189,16 +193,19 @@ async function upsertPersonWithPhone(data: Payload) {
     return personId;
   }
 
-  // 3) Si no existe → crear con email y (si hay) teléfono
+  // 3) Si no existe → crear
   try {
+    const createBody: any = {
+      name: data.name,
+      email: [{ value: email, primary: true, label: "work" }],
+    };
+    if (phone) createBody.phone = [{ value: phone, primary: true, label: "work" }];
+    if (PD_PERSON_ROLE_FIELD && role) createBody[PD_PERSON_ROLE_FIELD] = role;
+
     const created = await pd(`/persons`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: data.name,
-        email: [{ value: email, primary: true, label: "work" }],
-        phone: phone ? [{ value: phone, primary: true, label: "work" }] : undefined,
-      }),
+      body: JSON.stringify(createBody),
     });
     return (created as any)?.data?.id as number | null;
   } catch (e) {
@@ -207,7 +214,7 @@ async function upsertPersonWithPhone(data: Payload) {
   }
 }
 
-/* ========= Util: formatear breve resumen de respuestas ========= */
+/* ========= Util: resumen breve de respuestas ========= */
 function briefAnswersSummary(answers?: Payload["answers"]) {
   try {
     const items: Answer[] | undefined = answers?.items;
@@ -215,9 +222,9 @@ function briefAnswersSummary(answers?: Payload["answers"]) {
     const mapLabel: Record<string, string> = {
       industria: "Industria",
       erp: "ERP",
+      busca: "Búsqueda",
       personas: "Personas",
       satisfaccion: "Satisfacción",
-      busca: "Búsqueda",
     };
     const lines = items.map((a) => {
       const k = mapLabel[a.id] || a.id;
@@ -238,13 +245,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Faltan nombre o email" }, { status: 400 });
     }
 
-    // País -> pipeline & stage
     const cc = countryToCode(data.country);
     const pipeline_id = PIPELINES[cc];
     const stage_id = STAGE_CAPA1[cc];
 
-    // 1) Persona (buscar o crear) con teléfono si viene
-    const personId = await upsertPersonWithPhone(data);
+    // 1) Persona (buscar o crear) con phone + role
+    const personId = await upsertPersonWithPhoneAndRole(data);
 
     // 2) Organización (opcional)
     let orgId: number | undefined;
@@ -268,7 +274,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) Deal en Capa 1 del pipeline por país
+    // 3) Deal
     console.log(`[Deals] Creando deal → cc=${cc} pipeline=${pipeline_id} stage=${stage_id}`);
     const deal = await pd(`/deals`, {
       method: "POST",
@@ -280,15 +286,14 @@ export async function POST(req: Request) {
         pipeline_id,
         stage_id,
         value: 0,
-        currency: "GTQ", // ajusta si quieres por país
+        currency: "GTQ",
       }),
     });
     const dealId = (deal as any)?.data?.id;
     console.log(`🟢 Deal #${dealId} creado en pipeline ${pipeline_id}, stage ${stage_id}`);
 
-    // 4) Nota con contexto (incluye teléfono y evaluación)
+    // 4) Nota con contexto (incluye teléfono, cargo y evaluación)
     try {
-      // opcional: derivar score2Count si viene el arreglo de respuestas
       let score2Count: number | undefined;
       try {
         if (Array.isArray(data.answers?.items)) {
@@ -302,6 +307,7 @@ export async function POST(req: Request) {
         `Formulario diagnóstico\n` +
         `• Nombre: ${data.name}\n` +
         (data.company ? `• Empresa: ${data.company}\n` : "") +
+        (data.role ? `• Cargo: ${data.role}\n` : "") +            // <-- agregado
         `• Email: ${data.email}\n` +
         (data.country ? `• País: ${data.country}\n` : "") +
         (data.phone ? `• Teléfono: ${data.phone}\n` : "") +
