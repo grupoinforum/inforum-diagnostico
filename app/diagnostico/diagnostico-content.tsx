@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 /* =========================
-   PREGUNTAS (7)
+   PREGUNTAS (5)
    ========================= */
 const QUESTIONS = [
   {
@@ -41,28 +41,8 @@ const QUESTIONS = [
     label: "¿Cuántas personas dependen del sistema para su trabajo diario?",
     type: "single" as const,
     options: [
-      { value: ">20", label: "+20 personas", score: 2 },
-      { value: "<=20", label: "-20 personas", score: 1 },
-    ],
-    required: true,
-  },
-  {
-    id: "paises",
-    label: "¿La compañía opera en 1 o varios países?",
-    type: "single" as const,
-    options: [
-      { value: "1", label: "1 país", score: 1 },
-      { value: ">1", label: "Varios países", score: 2 },
-    ],
-    required: true,
-  },
-  {
-    id: "lineas",
-    label: "¿Cuántas líneas de negocio tiene la compañía?",
-    type: "single" as const,
-    options: [
-      { value: "1", label: "1 línea de negocio", score: 1 },
-      { value: ">1", label: "Múltiples líneas de negocio", score: 2 },
+      { value: ">10", label: "+10 personas", score: 2 },
+      { value: "<=10", label: "-10 personas", score: 1 },
     ],
     required: true,
   },
@@ -78,12 +58,16 @@ const QUESTIONS = [
     required: true,
   },
   {
-    id: "protecnologia",
-    label: "¿La empresa es pro-tecnología?",
+    id: "busca",
+    label: "¿Estas buscando un software o servicio en particular para tu empresa?",
     type: "single" as const,
     options: [
-      { value: "si", label: "Sí", score: 2 },
-      { value: "no", label: "No", score: 1 },
+      { value: "nomina_planilla", label: "Sistema Nómina y Planilla", score: 2 },
+      { value: "crm", label: "Sistema CRM", score: 1 },
+      { value: "nube", label: "Servicio de Nube", score: 2 },
+      { value: "consultoria", label: "Consultoría y/o Capacitaciones", score: 2 },
+      { value: "facturacion", label: "Facturación Electrónica", score: 2 },
+      { value: "otros", label: "Otros (especificar)", score: 2, requiresText: true },
     ],
     required: true,
   },
@@ -110,7 +94,7 @@ const COUNTRY_PREFIX: Record<CountryValue, string> = {
   SV: "+503",
   HN: "+504",
   PA: "+507",
-  DO: "+1",    // RD usa +1 (NANP)
+  DO: "+1", // RD usa +1 (NANP)
   EC: "+593",
 };
 
@@ -143,15 +127,32 @@ function isCorporateEmail(email: string) {
 }
 
 /* =========================
-   EVALUACIÓN
+   TEXTOS DE RESULTADO
    ========================= */
 const SUCCESS_TEXT_FORM = `¡Felicidades! Estás a 1 paso de obtener tu asesoría sin costo. Rita Muralles se estará comunicando contigo para agendar una sesión corta de 30min para presentarnos y realizar unas últimas dudas para guiarte de mejor manera. Acabamos de enviarte un correo con esta información.`;
 
 const FULL_TEXT_FORM = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros. Te estaremos contactando al liberar espacio.`;
 
+/* =========================
+   EVALUACIÓN (regla actualizada)
+   ========================= */
+// Regla nueva solicitada:
+// - Si tiene >3 con score 1 ⇒ NO califica.
+// - Si tiene >3 con score 2 ⇒ SÍ califica.
+// - En los demás casos ⇒ NO califica.
 function evaluate(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
-  const qualifies = score1Count <= 3;
+  const score2Count = finalAnswers.filter(a => a.score === 2).length;
+
+  let qualifies = false;
+  if (score1Count > 3) {
+    qualifies = false;
+  } else if (score2Count > 3) {
+    qualifies = true;
+  } else {
+    qualifies = false;
+  }
+
   const resultText = qualifies ? "Sí califica" : "No hay cupo (exhaustivo)";
   const uiText = qualifies ? SUCCESS_TEXT_FORM : FULL_TEXT_FORM;
   return { score1Count, qualifies, resultText, uiText };
@@ -201,6 +202,7 @@ export default function DiagnosticoContent() {
     const opt = q.options.find(o => o.value === optionValue)!;
     setAnswers(prev => ({ ...prev, [qid]: { id: qid, value: optionValue, score: (opt.score as 1|2) } }));
   };
+
   const handleExtraText = (qid: string, text: string) => {
     const existing = answers[qid];
     if (!existing) return;
@@ -357,6 +359,14 @@ export default function DiagnosticoContent() {
                 <input
                   type="text"
                   placeholder="Especifica aquí"
+                  className="mt-3 w-full border rounded-xl px-3 py-2"
+                  onChange={(e) => handleExtraText(q.id, e.target.value)}
+                />
+              )}
+              {q.id === "busca" && answers[q.id]?.value === "otros" && (
+                <input
+                  type="text"
+                  placeholder="Cuéntanos qué necesitas"
                   className="mt-3 w-full border rounded-xl px-3 py-2"
                   onChange={(e) => handleExtraText(q.id, e.target.value)}
                 />
