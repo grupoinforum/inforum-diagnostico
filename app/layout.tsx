@@ -13,7 +13,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <head>
-        {/* Microsoft Clarity */}
+        {/* === Google Tag (Ads/Analytics) === */}
+        <Script
+          id="google-tag"
+          strategy="afterInteractive"
+          src="https://www.googletagmanager.com/gtag/js?id=AW-385774897"
+        />
+        <Script
+          id="google-init"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'AW-385774897');
+            `,
+          }}
+        />
+
+        {/* === Microsoft Clarity === */}
         <Script
           id="microsoft-clarity"
           strategy="afterInteractive"
@@ -26,8 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
+
       <body className="min-h-screen bg-white text-gray-900 antialiased flex flex-col">
-        {/* HEADER full-width */}
+        {/* HEADER */}
         <header className="w-full bg-[#082a49]">
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center">
             <Image
