@@ -78,6 +78,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
               y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
             })(window, document, "clarity", "script", "tnlhp2hkhd");
+
+            // Ping automático cuando Clarity esté listo
+            const waitForClarity = setInterval(() => {
+              if (typeof window.clarity === 'function') {
+                window.clarity('identify', 'valerie-auto-ping');
+                clearInterval(waitForClarity);
+                console.log('✅ Clarity identificado automáticamente');
+              }
+            }, 1000);
           `}
         </Script>
       </body>
