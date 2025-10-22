@@ -28,9 +28,6 @@ const QUESTIONS = [
     type: "single" as const,
     options: [
       { value: "sapb1", label: "SAP Business One", score: 2 },
-      { value: "odoo", label: "Odoo", score: 2 },
-      { value: "oracle", label: "Oracle", score: 2 },
-      { value: "msdynamics", label: "Microsoft Dynamics", score: 1 },
       { value: "sistema_propio", label: "Sistema Propio", score: 2 },
       { value: "erp_otro", label: "Otro (especificar)", score: 2, requiresText: true },
     ],
@@ -41,11 +38,7 @@ const QUESTIONS = [
     label: "¿Estás buscando un software o servicio en particular para tu empresa?",
     type: "single" as const,
     options: [
-      { value: "nomina_planilla", label: "Sistema Nómina y Planilla", score: 2 },
-      { value: "crm", label: "Sistema CRM", score: 1 },
-      { value: "nube", label: "Servicio de Nube", score: 2 },
-      { value: "consultoria", label: "Consultoría y/o Capacitaciones", score: 2 },
-      { value: "facturacion", label: "Facturación Electrónica", score: 2 },
+      { value: "erp", label: "ERP", score: 2 },
       { value: "otros", label: "Otros (especificar)", score: 2, requiresText: true },
     ],
     required: true,
