@@ -344,3 +344,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: e?.message || "No se logró enviar" }, { status: 500 });
   }
 }
+
