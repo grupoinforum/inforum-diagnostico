@@ -17,8 +17,8 @@ const QUESTIONS = [
       { value: "produccion", label: "Producción", score: 2 },
       { value: "distribucion", label: "Distribución", score: 2 },
       { value: "retail", label: "Retail", score: 2 },
-      { value: "servicios", label: "Servicios", score: 1 },
-      { value: "otro", label: "Otro (especificar)", score: 1, requiresText: true },
+      { value: "servicios", label: "Servicios", score: 2 },               // <-- actualizado
+      { value: "otro", label: "Otro (especificar)", score: 2, requiresText: true }, // <-- actualizado
     ],
     required: true,
   },
@@ -123,22 +123,13 @@ const SUCCESS_TEXT_FORM = `¡Felicidades! Estás a 1 paso de obtener tu asesorí
 const FULL_TEXT_FORM = `¡Gracias por llenar el cuestionario! Por el momento nuestro equipo se encuentra con cupo lleno. Acabamos de enviarte un correo a tu bandeja de entrada para compartirte más información sobre nosotros. Te estaremos contactando al liberar espacio.`;
 
 /* =========================
-   EVALUACIÓN (regla actualizada)
+   EVALUACIÓN (regla: si hay alguna respuesta tipo 1 → no califica)
    ========================= */
 function evaluate(finalAnswers: Answer[]) {
   const score1Count = finalAnswers.filter(a => a.score === 1).length;
-  const score2Count = finalAnswers.filter(a => a.score === 2).length;
+  const qualifies = score1Count === 0; // si aparece un 1 en cualquier pregunta, no califica
 
-  let qualifies = false;
-  if (score1Count > 3) {
-    qualifies = false;
-  } else if (score2Count > 3) {
-    qualifies = true;
-  } else {
-    qualifies = false;
-  }
-
-  const resultText = qualifies ? "Sí califica" : "No hay cupo (exhaustivo)";
+  const resultText = qualifies ? "Sí califica" : "No califica";
   const uiText = qualifies ? SUCCESS_TEXT_FORM : FULL_TEXT_FORM;
   return { score1Count, qualifies, resultText, uiText };
 }
@@ -175,7 +166,7 @@ export default function DiagnosticoContent() {
   }>({
     name: "",
     company: "",
-    role: "",                 // <-- inicializado
+    role: "",
     email: "",
     country: "GT",
     consent: false,
@@ -252,7 +243,7 @@ export default function DiagnosticoContent() {
     () =>
       form.name.trim().length > 1 &&
       form.company.trim().length > 1 &&
-      form.role.trim().length > 1 &&      // <-- obligatorio
+      form.role.trim().length > 1 &&
       /.+@.+\..+/.test(form.email) &&
       isCorporateEmail(form.email) &&
       isPhoneValid(form.phoneLocal, form.country),
@@ -272,7 +263,7 @@ export default function DiagnosticoContent() {
       await submitDiagnostico({
         name: form.name,
         company: form.company,
-        role: form.role,           // <-- enviar cargo al backend
+        role: form.role,
         email: form.email,
         country: countryLabel,
         phone: phoneFull,
