@@ -329,8 +329,12 @@ export default function DiagnosticoContent() {
         <div className="h-2 bg-blue-500 rounded transition-all" style={{ width: barWidth }} />
       </div>
 
-      <h1 className="text-2xl font-semibold mb-4">Diagnóstico para Radiografía de Software de Gestión Empresarial</h1>
-      <p className="text-gray-600 mb-4">Completa el cuestionario y conoce tu resultado al instante.</p>
+      {/* Título y descripción ACTUALIZADOS */}
+      <h1 className="text-2xl font-semibold mb-4">Análisis de Software de Gestión Empresarial</h1>
+      <p className="text-gray-600 mb-4">
+        Completa el cuestionario para que podamos analizar tu situación actual y determinar qué soluciones se ajustan mejor a las necesidades de tu empresa.
+      </p>
+
       {errorMsg && <p className="text-sm text-red-600 mb-4">{errorMsg}</p>}
 
       {/* Paso 1 */}
@@ -505,3 +509,4 @@ export default function DiagnosticoContent() {
     </main>
   );
 }
+
